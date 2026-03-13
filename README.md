@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/assets/banner.jpg" alt="code-review-graph" width="100%" />
-</p>
-
 <h1 align="center">code-review-graph</h1>
 
 <p align="center">
