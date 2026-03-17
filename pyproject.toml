@@ -25,12 +25,12 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-    "mcp>=1.0.0",
-    "fastmcp>=0.1.0",
-    "tree-sitter>=0.23.0",
-    "tree-sitter-language-pack>=0.3.0",
-    "networkx>=3.2",
-    "watchdog>=4.0.0",
+    "mcp>=1.0.0,<2",
+    "fastmcp>=0.1.0,<2",
+    "tree-sitter>=0.23.0,<1",
+    "tree-sitter-language-pack>=0.3.0,<1",
+    "networkx>=3.2,<4",
+    "watchdog>=4.0.0,<6",
 ]
 
 [project.scripts]
@@ -38,13 +38,13 @@ code-review-graph = "code_review_graph.cli:main"
 
 [project.optional-dependencies]
 embeddings = [
-    "sentence-transformers>=3.0.0",
-    "numpy>=1.26",
+    "sentence-transformers>=3.0.0,<4",
+    "numpy>=1.26,<3",
 ]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "ruff>=0.3.0",
+    "pytest>=8.0,<9",
+    "pytest-asyncio>=0.23,<1",
+    "ruff>=0.3.0,<1",
 ]
 
 [tool.hatch.build.targets.wheel]
