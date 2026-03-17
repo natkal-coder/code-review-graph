@@ -5,6 +5,16 @@
   "version": "0.1.0",
   "publisher": "tirth8205",
   "license": "MIT",
+  "icon": "media/icons/icon.png",
+  "keywords": [
+    "code analysis",
+    "graph",
+    "visualization",
+    "dependencies",
+    "blast radius",
+    "code review",
+    "tree-sitter"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/tirth8205/code-review-graph"
