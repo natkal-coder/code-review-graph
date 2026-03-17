@@ -217,6 +217,8 @@ def collect_all_files(repo_root: Path) -> list[str]:
         full_path = repo_root / rel_path
         if not full_path.is_file():
             continue
+        if full_path.is_symlink():
+            continue
         if parser.detect_language(full_path) is None:
             continue
         if _is_binary(full_path):
@@ -409,6 +411,8 @@ def watch(repo_root: Path, store: GraphStore) -> None:
             self._timer: threading.Timer | None = None
 
         def _should_handle(self, path: str) -> bool:
+            if Path(path).is_symlink():
+                return False
             try:
                 rel = str(Path(path).relative_to(repo_root))
             except ValueError:
@@ -469,6 +473,8 @@ def watch(repo_root: Path, store: GraphStore) -> None:
         def _update_file(self, abs_path: str):
             path = Path(abs_path)
             if not path.is_file():
+                return
+            if path.is_symlink():
                 return
             if _is_binary(path):
                 return
