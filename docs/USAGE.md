@@ -1,6 +1,6 @@
 # Code Review Graph — User Guide
 
-**Version:** v1.7.2 (Mar 9, 2026)
+**Version:** v1.8.2 (Mar 17, 2026)
 
 ## Installation
 

@@ -35,6 +35,8 @@ max_depth: int = 2               # Hops in graph
 repo_root: str | None
 base: str = "HEAD~1"
 ```
+> BFS traversal is capped at 500 nodes to prevent resource exhaustion.
+> `repo_root` must point to a directory containing `.git` or `.code-review-graph`.
 
 ### `query_graph_tool`
 ```

@@ -1,6 +1,6 @@
 # Features
 
-## v1.7.2 (Current)
+## v1.8.2 (Current)
 - **Watch mode thread safety**: SQLite connections compatible with Python 3.10/3.11 watchdog threads.
 - **Full rebuild cleanup**: Purges stale data from deleted files during full rebuild.
 - **Dependency trim**: Removed unused `gitpython` dependency.
