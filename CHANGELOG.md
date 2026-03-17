@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.2] - 2026-03-17
+
+### Fixed
+- **C# parsing broken**: Renamed language identifier from `c_sharp` to `csharp` to match `tree-sitter-language-pack`'s actual identifier. Previously, all C# files were silently skipped because `_get_parser()` swallowed the `LookupError`.
+
 ## [1.8.1] - 2026-03-17
 
 ### Fixed

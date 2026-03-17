@@ -61,7 +61,7 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".go": "go",
     ".rs": "rust",
     ".java": "java",
-    ".cs": "c_sharp",
+    ".cs": "csharp",
     ".rb": "ruby",
     ".cpp": "cpp",
     ".cc": "cpp",
@@ -86,7 +86,7 @@ _CLASS_TYPES: dict[str, list[str]] = {
     "java": ["class_declaration", "interface_declaration", "enum_declaration"],
     "c": ["struct_specifier", "type_definition"],
     "cpp": ["class_specifier", "struct_specifier"],
-    "c_sharp": [
+    "csharp": [
         "class_declaration", "interface_declaration",
         "enum_declaration", "struct_declaration",
     ],
@@ -106,7 +106,7 @@ _FUNCTION_TYPES: dict[str, list[str]] = {
     "java": ["method_declaration", "constructor_declaration"],
     "c": ["function_definition"],
     "cpp": ["function_definition"],
-    "c_sharp": ["method_declaration", "constructor_declaration"],
+    "csharp": ["method_declaration", "constructor_declaration"],
     "ruby": ["method", "singleton_method"],
     "kotlin": ["function_declaration"],
     "swift": ["function_declaration"],
@@ -123,7 +123,7 @@ _IMPORT_TYPES: dict[str, list[str]] = {
     "java": ["import_declaration"],
     "c": ["preproc_include"],
     "cpp": ["preproc_include"],
-    "c_sharp": ["using_directive"],
+    "csharp": ["using_directive"],
     "ruby": ["call"],  # require/require_relative
     "kotlin": ["import_header"],
     "swift": ["import_declaration"],
@@ -140,7 +140,7 @@ _CALL_TYPES: dict[str, list[str]] = {
     "java": ["method_invocation", "object_creation_expression"],
     "c": ["call_expression"],
     "cpp": ["call_expression"],
-    "c_sharp": ["invocation_expression", "object_creation_expression"],
+    "csharp": ["invocation_expression", "object_creation_expression"],
     "ruby": ["call", "method_call"],
     "kotlin": ["call_expression"],
     "swift": ["call_expression"],
@@ -446,7 +446,7 @@ class CodeParser:
                     for arg in child.children:
                         if arg.type in ("identifier", "attribute"):
                             bases.append(arg.text.decode("utf-8", errors="replace"))
-        elif language in ("java", "c_sharp", "kotlin"):
+        elif language in ("java", "csharp", "kotlin"):
             # Look for superclass/interfaces in extends/implements clauses
             for child in node.children:
                 if child.type in (
@@ -528,7 +528,7 @@ class CodeParser:
                 if child.type in ("system_lib_string", "string_literal"):
                     val = child.text.decode("utf-8", errors="replace").strip("<>\"")
                     imports.append(val)
-        elif language in ("java", "c_sharp"):
+        elif language in ("java", "csharp"):
             # import/using package.Class
             parts = text.split()
             if len(parts) >= 2:

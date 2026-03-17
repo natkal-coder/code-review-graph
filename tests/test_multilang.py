@@ -166,20 +166,20 @@ class TestCppParsing:
 def _has_csharp_parser():
     try:
         import tree_sitter_language_pack as tslp
-        tslp.get_parser("c_sharp")
+        tslp.get_parser("csharp")
         return True
     except (LookupError, ImportError):
         return False
 
 
-@pytest.mark.skipif(not _has_csharp_parser(), reason="c_sharp tree-sitter grammar not installed")
+@pytest.mark.skipif(not _has_csharp_parser(), reason="csharp tree-sitter grammar not installed")
 class TestCSharpParsing:
     def setup_method(self):
         self.parser = CodeParser()
         self.nodes, self.edges = self.parser.parse_file(FIXTURES / "Sample.cs")
 
     def test_detects_language(self):
-        assert self.parser.detect_language(Path("Program.cs")) == "c_sharp"
+        assert self.parser.detect_language(Path("Program.cs")) == "csharp"
 
     def test_finds_classes_and_interfaces(self):
         classes = [n for n in self.nodes if n.kind == "Class"]
