@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.8.1] - 2026-03-17
+
+### Fixed
+- Add missing `max_nodes` parameter to `get_impact_radius` method signature (caused `NameError` at runtime)
+- Fix `.gitignore` test assertion to match expanded comment format
+
 ## [1.8.0] - 2026-03-17
 
 ### Security
