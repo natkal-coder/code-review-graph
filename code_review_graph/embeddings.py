@@ -7,10 +7,10 @@ Supports multiple providers:
 
 from __future__ import annotations
 
+import hashlib
+import os
 import sqlite3
 import struct
-import os
-import hashlib
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -262,7 +262,8 @@ class EmbeddingStore:
             ).fetchone()
 
             # Re-embed if text changed OR provider changed
-            if existing and existing["text_hash"] == text_hash and existing["provider"] == provider_name:
+            if (existing and existing["text_hash"] == text_hash
+                    and existing["provider"] == provider_name):
                 continue
             to_embed.append((node, text, text_hash))
 
