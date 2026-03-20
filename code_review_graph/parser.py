@@ -12,11 +12,25 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import tree_sitter_language_pack as tslp
 
 from .tsconfig_resolver import TsconfigResolver
+
+
+class CellInfo(NamedTuple):
+    """Represents a single cell in a notebook with its language."""
+    index: int
+    language: str
+    source: str
+
+
+_SQL_TABLE_RE = re.compile(
+    r"(?:FROM|JOIN|INTO|CREATE\s+(?:OR\s+REPLACE\s+)?(?:TABLE|VIEW)|INSERT\s+OVERWRITE)"
+    r"\s+((?:`[^`]+`|\w+)(?:\.(?:`[^`]+`|\w+))*)",
+    re.IGNORECASE,
+)
 
 logger = logging.getLogger(__name__)
 
