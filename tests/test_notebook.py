@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from code_review_graph.parser import CodeParser
+from code_review_graph.parser import CodeParser, _SQL_TABLE_RE
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -105,3 +105,53 @@ class TestNotebookParsing:
         )
         assert nodes == []
         assert edges == []
+
+
+class TestSqlTableExtraction:
+    def test_from_clause(self):
+        matches = _SQL_TABLE_RE.findall("SELECT * FROM my_table")
+        assert "my_table" in matches
+
+    def test_qualified_table(self):
+        matches = _SQL_TABLE_RE.findall("SELECT * FROM catalog.schema.table")
+        assert "catalog.schema.table" in matches
+
+    def test_join(self):
+        matches = _SQL_TABLE_RE.findall(
+            "SELECT * FROM a JOIN b ON a.id = b.id"
+        )
+        assert "a" in matches
+        assert "b" in matches
+
+    def test_insert_into(self):
+        matches = _SQL_TABLE_RE.findall("INSERT INTO target_table VALUES (1)")
+        assert "target_table" in matches
+
+    def test_create_table(self):
+        matches = _SQL_TABLE_RE.findall("CREATE TABLE my_db.new_table (id INT)")
+        assert "my_db.new_table" in matches
+
+    def test_create_or_replace_view(self):
+        matches = _SQL_TABLE_RE.findall(
+            "CREATE OR REPLACE VIEW my_view AS SELECT 1"
+        )
+        assert "my_view" in matches
+
+    def test_insert_overwrite(self):
+        matches = _SQL_TABLE_RE.findall(
+            "INSERT OVERWRITE catalog.schema.tbl SELECT * FROM src"
+        )
+        assert "catalog.schema.tbl" in matches
+        assert "src" in matches
+
+    def test_backtick_quoted(self):
+        matches = _SQL_TABLE_RE.findall("SELECT * FROM `my-catalog`.`schema`.`table`")
+        assert any("my-catalog" in m for m in matches)
+
+    def test_no_table_refs(self):
+        matches = _SQL_TABLE_RE.findall("SELECT 1 + 1")
+        assert matches == []
+
+    def test_case_insensitive(self):
+        matches = _SQL_TABLE_RE.findall("select * from My_Table")
+        assert "My_Table" in matches
