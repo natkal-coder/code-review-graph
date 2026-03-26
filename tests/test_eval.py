@@ -14,10 +14,12 @@ from code_review_graph.eval.reporter import (
 import pytest
 
 try:
+    import yaml as _yaml  # noqa: F401
     from code_review_graph.eval.runner import write_csv
     _HAS_YAML = True
 except ImportError:
     _HAS_YAML = False
+    write_csv = None  # type: ignore[assignment]
 from code_review_graph.eval.scorer import (
     compute_mrr,
     compute_precision_recall,
