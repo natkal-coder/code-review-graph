@@ -1,0 +1,23 @@
+name: httpx
+url: https://github.com/encode/httpx
+commit: HEAD
+language: python
+size_category: small
+
+test_commits:
+  - sha: HEAD~1
+    description: "Recent change 1"
+    changed_files: 2
+  - sha: HEAD~2
+    description: "Recent change 2"
+    changed_files: 3
+
+entry_points:
+  - "httpx/_client.py::Client.get"
+  - "httpx/_client.py::Client.post"
+
+search_queries:
+  - query: "HTTP connection pool"
+    expected: "httpx/_transports/default.py::HTTPTransport"
+  - query: "parse response headers"
+    expected: "httpx/_models.py::Response"

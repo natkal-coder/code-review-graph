@@ -1,0 +1,23 @@
+name: express
+url: https://github.com/expressjs/express
+commit: HEAD
+language: javascript
+size_category: small
+
+test_commits:
+  - sha: HEAD~1
+    description: "Recent change 1"
+    changed_files: 2
+  - sha: HEAD~2
+    description: "Recent change 2"
+    changed_files: 3
+
+entry_points:
+  - "lib/application.js::app.handle"
+  - "lib/router/index.js::Router.handle"
+
+search_queries:
+  - query: "middleware pipeline"
+    expected: "lib/router/index.js::Router"
+  - query: "request parsing"
+    expected: "lib/request.js::req"

@@ -1,11 +1,24 @@
-"""Tests for the evaluation framework (scorer and reporter)."""
+"""Tests for the evaluation framework (scorer, reporter, runner, benchmarks)."""
 
-from code_review_graph.eval.reporter import generate_markdown_report
+import csv
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+from code_review_graph.eval.reporter import (
+    generate_full_report,
+    generate_markdown_report,
+    generate_readme_tables,
+)
+from code_review_graph.eval.runner import write_csv
 from code_review_graph.eval.scorer import (
     compute_mrr,
     compute_precision_recall,
     compute_token_efficiency,
 )
+
+# --- Existing scorer tests ---
 
 
 def test_token_efficiency():
@@ -41,12 +54,8 @@ def test_precision_recall():
     predicted = {"a", "b", "c", "d"}
     actual = {"b", "c", "e"}
     result = compute_precision_recall(predicted, actual)
-    # true positives = {b, c} = 2
-    # precision = 2/4 = 0.5
-    # recall = 2/3 = 0.6667
     assert result["precision"] == 0.5
     assert result["recall"] == round(2 / 3, 4)
-    # f1 = 2 * 0.5 * 0.6667 / (0.5 + 0.6667)
     expected_f1 = round(2 * 0.5 * (2 / 3) / (0.5 + 2 / 3), 4)
     assert result["f1"] == expected_f1
 
@@ -90,3 +99,235 @@ def test_generate_markdown_report():
 def test_generate_markdown_report_empty():
     report = generate_markdown_report([])
     assert "No benchmark results" in report
+
+
+# --- New tests ---
+
+
+def test_load_config():
+    """Load a temp YAML config and verify structure."""
+    import yaml
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False
+    ) as f:
+        yaml.dump(
+            {
+                "name": "test-repo",
+                "url": "https://example.com/repo.git",
+                "commit": "HEAD",
+                "language": "python",
+                "size_category": "small",
+                "test_commits": [{"sha": "abc123", "description": "test"}],
+                "entry_points": ["main.py::main"],
+                "search_queries": [
+                    {"query": "hello", "expected": "main.py::greet"}
+                ],
+            },
+            f,
+        )
+        tmp_path = f.name
+
+    try:
+        import yaml as _yaml
+
+        with open(tmp_path) as fh:
+            config = _yaml.safe_load(fh)
+
+        assert config["name"] == "test-repo"
+        assert config["language"] == "python"
+        assert len(config["test_commits"]) == 1
+        assert len(config["entry_points"]) == 1
+        assert len(config["search_queries"]) == 1
+    finally:
+        os.unlink(tmp_path)
+
+
+def test_write_csv():
+    """Write results to CSV and read back."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "results" / "test.csv"
+        results = [
+            {"repo": "foo", "tokens": 100, "ratio": 2.5},
+            {"repo": "bar", "tokens": 200, "ratio": 1.5},
+        ]
+        write_csv(results, path)
+
+        assert path.exists()
+        with open(path, newline="") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert len(rows) == 2
+        assert rows[0]["repo"] == "foo"
+        assert rows[1]["tokens"] == "200"
+
+
+def test_write_csv_empty():
+    """Writing empty results should be a no-op."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "empty.csv"
+        write_csv([], path)
+        assert not path.exists()
+
+
+def test_generate_readme_tables():
+    """Feed sample CSV data and verify table format."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        results_dir = Path(tmpdir)
+
+        # Write token efficiency CSV
+        te_path = results_dir / "test_token_efficiency_2026-01-01.csv"
+        with open(te_path, "w", newline="") as f:
+            w = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "repo", "commit", "description", "changed_files",
+                    "naive_tokens", "standard_tokens", "graph_tokens",
+                    "naive_to_graph_ratio", "standard_to_graph_ratio",
+                ],
+            )
+            w.writeheader()
+            w.writerow({
+                "repo": "myrepo", "commit": "abc", "description": "test",
+                "changed_files": "3", "naive_tokens": "1000",
+                "standard_tokens": "500", "graph_tokens": "200",
+                "naive_to_graph_ratio": "5.0",
+                "standard_to_graph_ratio": "2.5",
+            })
+
+        tables = generate_readme_tables(results_dir)
+        assert "### Token Efficiency" in tables
+        assert "myrepo" in tables
+        assert "1000" in tables
+
+
+def test_generate_full_report():
+    """Feed sample CSV data and verify report sections."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        results_dir = Path(tmpdir)
+
+        # Write a build_performance CSV
+        bp_path = results_dir / "test_build_performance_2026-01-01.csv"
+        with open(bp_path, "w", newline="") as f:
+            w = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "repo", "file_count", "node_count", "edge_count",
+                    "flow_detection_seconds", "community_detection_seconds",
+                    "search_avg_ms", "nodes_per_second",
+                ],
+            )
+            w.writeheader()
+            w.writerow({
+                "repo": "testrepo", "file_count": "10", "node_count": "50",
+                "edge_count": "30", "flow_detection_seconds": "0.1",
+                "community_detection_seconds": "0.2",
+                "search_avg_ms": "5.0", "nodes_per_second": "500",
+            })
+
+        report = generate_full_report(results_dir)
+        assert "# Evaluation Report" in report
+        assert "## Methodology" in report
+        assert "## Build Performance" in report
+        assert "testrepo" in report
+
+
+def test_runner_with_mock_repo():
+    """Create a tiny git repo with 2 Python files, run benchmarks, verify output."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "mock_repo"
+        repo_path.mkdir()
+
+        # Init git repo
+        subprocess.run(
+            ["git", "init"], cwd=str(repo_path), capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=str(repo_path), capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=str(repo_path), capture_output=True,
+        )
+
+        # Create two Python files
+        (repo_path / "main.py").write_text(
+            'from helper import greet\n\ndef main():\n    greet("world")\n',
+            encoding="utf-8",
+        )
+        (repo_path / "helper.py").write_text(
+            'def greet(name):\n    print(f"Hello {name}")\n',
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            ["git", "add", "."], cwd=str(repo_path), capture_output=True
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "initial"],
+            cwd=str(repo_path), capture_output=True,
+        )
+
+        # Second commit: modify helper.py
+        (repo_path / "helper.py").write_text(
+            'def greet(name):\n    print(f"Hi {name}!")\n',
+            encoding="utf-8",
+        )
+        subprocess.run(
+            ["git", "add", "."], cwd=str(repo_path), capture_output=True
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "update greeting"],
+            cwd=str(repo_path), capture_output=True,
+        )
+
+        # Build graph
+        from code_review_graph.graph import GraphStore
+        from code_review_graph.incremental import full_build, get_db_path
+
+        db_path = get_db_path(repo_path)
+        store = GraphStore(db_path)
+        full_build(repo_path, store)
+
+        config = {
+            "name": "mock",
+            "language": "python",
+            "test_commits": [
+                {"sha": "HEAD", "description": "update greeting"},
+            ],
+            "entry_points": ["main.py::main"],
+            "search_queries": [
+                {"query": "greet", "expected": "helper.py::greet"},
+            ],
+        }
+
+        # Run token_efficiency
+        from code_review_graph.eval.benchmarks import token_efficiency
+        te_results = token_efficiency.run(repo_path, store, config)
+        assert len(te_results) >= 1
+        assert "naive_tokens" in te_results[0]
+        assert "graph_tokens" in te_results[0]
+
+        # Run impact_accuracy
+        from code_review_graph.eval.benchmarks import impact_accuracy
+        ia_results = impact_accuracy.run(repo_path, store, config)
+        assert len(ia_results) >= 1
+        assert "precision" in ia_results[0]
+        assert "f1" in ia_results[0]
+
+        # Run search_quality
+        from code_review_graph.eval.benchmarks import search_quality
+        sq_results = search_quality.run(repo_path, store, config)
+        assert len(sq_results) == 1
+        assert "reciprocal_rank" in sq_results[0]
+
+        # Run build_performance
+        from code_review_graph.eval.benchmarks import build_performance
+        bp_results = build_performance.run(repo_path, store, config)
+        assert len(bp_results) == 1
+        assert "node_count" in bp_results[0]
+        assert bp_results[0]["node_count"] > 0
+
+        store.close()

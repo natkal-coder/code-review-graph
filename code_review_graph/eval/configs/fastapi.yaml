@@ -1,0 +1,23 @@
+name: fastapi
+url: https://github.com/tiangolo/fastapi
+commit: HEAD
+language: python
+size_category: medium
+
+test_commits:
+  - sha: HEAD~1
+    description: "Recent change 1"
+    changed_files: 3
+  - sha: HEAD~2
+    description: "Recent change 2"
+    changed_files: 5
+
+entry_points:
+  - "fastapi/applications.py::FastAPI"
+  - "fastapi/routing.py::APIRouter.add_api_route"
+
+search_queries:
+  - query: "dependency injection"
+    expected: "fastapi/dependencies/utils.py::solve_dependencies"
+  - query: "request validation"
+    expected: "fastapi/routing.py::APIRoute"

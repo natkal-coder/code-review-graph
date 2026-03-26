@@ -1,0 +1,23 @@
+name: gin
+url: https://github.com/gin-gonic/gin
+commit: HEAD
+language: go
+size_category: small
+
+test_commits:
+  - sha: HEAD~1
+    description: "Recent change 1"
+    changed_files: 2
+  - sha: HEAD~2
+    description: "Recent change 2"
+    changed_files: 3
+
+entry_points:
+  - "gin.go::Engine.ServeHTTP"
+  - "routergroup.go::RouterGroup.handle"
+
+search_queries:
+  - query: "context handling"
+    expected: "context.go::Context"
+  - query: "route tree"
+    expected: "tree.go::node"

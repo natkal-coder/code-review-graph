@@ -1,0 +1,23 @@
+name: nextjs
+url: https://github.com/vercel/next.js
+commit: HEAD
+language: javascript
+size_category: large
+
+test_commits:
+  - sha: HEAD~1
+    description: "Recent change 1"
+    changed_files: 5
+  - sha: HEAD~2
+    description: "Recent change 2"
+    changed_files: 8
+
+entry_points:
+  - "packages/next/src/server/next-server.ts::NextNodeServer"
+  - "packages/next/src/client/index.tsx::hydrate"
+
+search_queries:
+  - query: "server side rendering"
+    expected: "packages/next/src/server/render.tsx::renderToHTML"
+  - query: "image optimization"
+    expected: "packages/next/src/server/image-optimizer.ts::imageOptimizer"

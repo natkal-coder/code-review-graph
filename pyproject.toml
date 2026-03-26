@@ -56,6 +56,7 @@ communities = [
 ]
 eval = [
     "matplotlib>=3.7.0",
+    "pyyaml>=6.0",
 ]
 wiki = [
     "ollama>=0.1.0",
