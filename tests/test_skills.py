@@ -4,8 +4,8 @@ import json
 from unittest.mock import patch
 
 from code_review_graph.skills import (
-    PLATFORMS,
     _CLAUDE_MD_SECTION_MARKER,
+    PLATFORMS,
     generate_hooks_config,
     generate_skills,
     inject_claude_md,

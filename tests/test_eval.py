@@ -6,15 +6,17 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from code_review_graph.eval.reporter import (
     generate_full_report,
     generate_markdown_report,
     generate_readme_tables,
 )
-import pytest
 
 try:
     import yaml as _yaml  # noqa: F401
+
     from code_review_graph.eval.runner import write_csv
     _HAS_YAML = True
 except ImportError:

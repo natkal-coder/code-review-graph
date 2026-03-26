@@ -399,9 +399,9 @@ class TestChanges:
         # Patch _get_store to use our test store,
         # and get_changed_files/get_staged_and_unstaged to return empty.
         with (
-            patch("code_review_graph.tools._get_store") as mock_get_store,
-            patch("code_review_graph.tools.get_changed_files", return_value=[]),
-            patch("code_review_graph.tools.get_staged_and_unstaged", return_value=[]),
+            patch("code_review_graph.tools.review._get_store") as mock_get_store,
+            patch("code_review_graph.tools.review.get_changed_files", return_value=[]),
+            patch("code_review_graph.tools.review.get_staged_and_unstaged", return_value=[]),
         ):
             mock_get_store.return_value = (self.store, Path("/fake/repo"))
             # Prevent the store from being closed by the tool
@@ -421,10 +421,10 @@ class TestChanges:
         self._add_func("my_func", path="/fake/repo/app.py", line_start=1, line_end=10)
 
         with (
-            patch("code_review_graph.tools._get_store") as mock_get_store,
-            patch("code_review_graph.tools.get_changed_files", return_value=["app.py"]),
+            patch("code_review_graph.tools.review._get_store") as mock_get_store,
+            patch("code_review_graph.tools.review.get_changed_files", return_value=["app.py"]),
             patch(
-                "code_review_graph.tools.parse_git_diff_ranges",
+                "code_review_graph.tools.review.parse_git_diff_ranges",
                 return_value={"app.py": [(1, 10)]},
             ),
         ):
