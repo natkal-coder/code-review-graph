@@ -1,13 +1,21 @@
 """Tests for the embeddings module."""
 
-from unittest.mock import patch
+import json
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from code_review_graph.embeddings import (
+    LOCAL_DEFAULT_MODEL,
     EmbeddingStore,
+    LocalEmbeddingProvider,
+    MiniMaxEmbeddingProvider,
     _cosine_similarity,
     _decode_vector,
     _encode_vector,
     _node_to_text,
+    get_provider,
 )
 from code_review_graph.graph import GraphNode
 
@@ -133,3 +141,149 @@ class TestEmbeddingStore:
             # Should not raise even if node doesn't exist
             store.remove_node("nonexistent::func")
             store.close()
+
+
+class TestLocalEmbeddingProviderModelName:
+    """Tests for configurable model name on LocalEmbeddingProvider."""
+
+    def test_default_model_name(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CRG_EMBEDDING_MODEL", None)
+            provider = LocalEmbeddingProvider()
+            assert provider._model_name == LOCAL_DEFAULT_MODEL
+            assert provider.name == f"local:{LOCAL_DEFAULT_MODEL}"
+
+    def test_explicit_model_name(self):
+        with patch.dict(os.environ, {"CRG_EMBEDDING_MODEL": "should-be-ignored"}):
+            provider = LocalEmbeddingProvider(model_name="custom/model")
+            assert provider._model_name == "custom/model"
+            assert provider.name == "local:custom/model"
+
+    def test_env_var_fallback(self):
+        with patch.dict(os.environ, {"CRG_EMBEDDING_MODEL": "BAAI/bge-small-en-v1.5"}):
+            provider = LocalEmbeddingProvider()
+            assert provider._model_name == "BAAI/bge-small-en-v1.5"
+            assert provider.name == "local:BAAI/bge-small-en-v1.5"
+
+
+class TestGetProviderModel:
+    """Tests for model parameter in get_provider()."""
+
+    @patch("code_review_graph.embeddings.LocalEmbeddingProvider")
+    def test_local_passes_model(self, mock_cls):
+        mock_cls.return_value = MagicMock()
+        get_provider(provider=None, model="custom/model")
+        mock_cls.assert_called_once_with(model_name="custom/model")
+
+    @patch("code_review_graph.embeddings.LocalEmbeddingProvider")
+    def test_local_default_passes_none(self, mock_cls):
+        mock_cls.return_value = MagicMock()
+        get_provider(provider=None, model=None)
+        mock_cls.assert_called_once_with(model_name=None)
+
+
+class TestEmbeddingStoreModelPassthrough:
+    """Tests that EmbeddingStore passes model to get_provider."""
+
+    def test_model_forwarded_to_get_provider(self, tmp_path):
+        db = tmp_path / "embeddings.db"
+        with patch("code_review_graph.embeddings.get_provider", return_value=None) as mock_gp:
+            EmbeddingStore(db, model="custom/model").close()
+            mock_gp.assert_called_once_with(None, model="custom/model")
+
+    def test_provider_and_model_forwarded(self, tmp_path):
+        db = tmp_path / "embeddings.db"
+        with patch("code_review_graph.embeddings.get_provider", return_value=None) as mock_gp:
+            EmbeddingStore(db, provider="local", model="custom/model").close()
+            mock_gp.assert_called_once_with("local", model="custom/model")
+
+
+class TestMiniMaxEmbeddingProvider:
+    """Unit tests for MiniMaxEmbeddingProvider."""
+
+    def test_name(self):
+        provider = MiniMaxEmbeddingProvider(api_key="test-key")
+        assert provider.name == "minimax:embo-01"
+
+    def test_dimension(self):
+        provider = MiniMaxEmbeddingProvider(api_key="test-key")
+        assert provider.dimension == 1536
+
+    def test_embed_calls_api_with_db_type(self):
+        provider = MiniMaxEmbeddingProvider(api_key="test-key")
+        mock_vectors = [[0.1] * 1536, [0.2] * 1536]
+        mock_response = json.dumps({
+            "vectors": mock_vectors,
+            "total_tokens": 10,
+            "base_resp": {"status_code": 0, "status_msg": "success"},
+        }).encode("utf-8")
+
+        mock_resp_obj = MagicMock()
+        mock_resp_obj.read.return_value = mock_response
+        mock_resp_obj.__enter__ = MagicMock(return_value=mock_resp_obj)
+        mock_resp_obj.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp_obj) as mock_urlopen:
+            result = provider.embed(["hello", "world"])
+
+        assert len(result) == 2
+        assert len(result[0]) == 1536
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        payload = json.loads(req.data.decode("utf-8"))
+        assert payload["type"] == "db"
+        assert payload["model"] == "embo-01"
+
+    def test_embed_query_calls_api_with_query_type(self):
+        provider = MiniMaxEmbeddingProvider(api_key="test-key")
+        mock_vectors = [[0.5] * 1536]
+        mock_response = json.dumps({
+            "vectors": mock_vectors,
+            "total_tokens": 5,
+            "base_resp": {"status_code": 0, "status_msg": "success"},
+        }).encode("utf-8")
+
+        mock_resp_obj = MagicMock()
+        mock_resp_obj.read.return_value = mock_response
+        mock_resp_obj.__enter__ = MagicMock(return_value=mock_resp_obj)
+        mock_resp_obj.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp_obj) as mock_urlopen:
+            result = provider.embed_query("search term")
+
+        assert len(result) == 1536
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        payload = json.loads(req.data.decode("utf-8"))
+        assert payload["type"] == "query"
+
+    def test_embed_api_error_raises(self):
+        provider = MiniMaxEmbeddingProvider(api_key="test-key")
+        mock_response = json.dumps({
+            "vectors": [],
+            "base_resp": {"status_code": 1001, "status_msg": "invalid api key"},
+        }).encode("utf-8")
+
+        mock_resp_obj = MagicMock()
+        mock_resp_obj.read.return_value = mock_response
+        mock_resp_obj.__enter__ = MagicMock(return_value=mock_resp_obj)
+        mock_resp_obj.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp_obj):
+            with pytest.raises(RuntimeError, match="invalid api key"):
+                provider.embed_query("test")
+
+
+class TestGetProviderMiniMax:
+    """Tests for get_provider() with MiniMax."""
+
+    def test_get_provider_minimax_with_key(self):
+        with patch.dict("os.environ", {"MINIMAX_API_KEY": "test-key"}):
+            provider = get_provider("minimax")
+        assert isinstance(provider, MiniMaxEmbeddingProvider)
+        assert provider.name == "minimax:embo-01"
+
+    def test_get_provider_minimax_without_key_raises(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="MINIMAX_API_KEY"):
+                get_provider("minimax")

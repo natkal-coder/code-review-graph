@@ -343,3 +343,100 @@ class TestCodeParser:
         create_dog = next((f for f in funcs if f.name == "createDog"), None)
         assert create_dog is not None
         assert create_dog.parent_name is None
+
+    # --- tsconfig alias resolution ---
+
+    def test_tsconfig_alias_resolution(self):
+        """Alias imports should resolve to absolute file paths."""
+        nodes, edges = self.parser.parse_file(FIXTURES / "alias_importer.ts")
+        imports = [e for e in edges if e.kind == "IMPORTS_FROM"]
+        resolved_imports = [e for e in imports if e.target.endswith("utils.ts")]
+        assert len(resolved_imports) >= 1, (
+            f"Expected resolved alias import, got targets: {[e.target for e in imports]}"
+        )
+
+    def test_tsconfig_missing_gracefully_handled(self):
+        """Files without a tsconfig should still parse without errors."""
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = os.path.join(tmp_dir, "no_tsconfig_file.ts")
+            with open(tmp_path, "w") as f:
+                f.write('import { foo } from "@/bar";\nexport const x = 1;\n')
+            nodes, edges = self.parser.parse_file(Path(tmp_path))
+            imports = [e for e in edges if e.kind == "IMPORTS_FROM"]
+            assert any("@/bar" in e.target for e in imports)
+
+    # --- Vitest/Jest test detection ---
+
+    def test_vitest_test_detection(self):
+        """Vitest describe/it/test calls should produce Test nodes."""
+        nodes, edges = self.parser.parse_file(FIXTURES / "sample_vitest.test.ts")
+        tests = [n for n in nodes if n.kind == "Test"]
+        test_names = {t.name for t in tests}
+        assert any(n.startswith("describe") or n.startswith("describe:") for n in test_names), (
+            f"Expected describe Test node, got: {test_names}"
+        )
+        assert any(n.startswith("it:") or n.startswith("test:") for n in test_names), (
+            f"Expected it/test Test node, got: {test_names}"
+        )
+
+    def test_vitest_contains_edges(self):
+        """describe Test nodes should CONTAIN it/test Test nodes."""
+        nodes, edges = self.parser.parse_file(FIXTURES / "sample_vitest.test.ts")
+        describe_nodes = [
+            n for n in nodes
+            if n.kind == "Test"
+            and (n.name.startswith("describe") or n.name.startswith("describe:"))
+        ]
+        assert len(describe_nodes) >= 1
+        it_tests = [
+            n for n in nodes
+            if n.kind == "Test" and (n.name.startswith("it:") or n.name.startswith("test:"))
+        ]
+        assert len(it_tests) >= 2
+
+        file_path = str(FIXTURES / "sample_vitest.test.ts")
+        describe_qualified = {f"{file_path}::{n.name}" for n in describe_nodes}
+        contains_sources = {e.source for e in edges if e.kind == "CONTAINS"}
+        assert describe_qualified & contains_sources
+
+    def test_vitest_calls_edges(self):
+        """Calls inside test blocks should produce CALLS edges."""
+        nodes, edges = self.parser.parse_file(FIXTURES / "sample_vitest.test.ts")
+        calls = [e for e in edges if e.kind == "CALLS"]
+        assert len(calls) >= 1
+        test_names = {n.name for n in nodes if n.kind == "Test"}
+        file_path = str(FIXTURES / "sample_vitest.test.ts")
+        test_qualified = {f"{file_path}::{name}" for name in test_names}
+        call_sources = {e.source for e in calls}
+        assert call_sources & test_qualified
+
+    def test_vitest_tested_by_edges(self):
+        """TESTED_BY edges should be generated from test calls to production code."""
+        nodes, edges = self.parser.parse_file(FIXTURES / "sample_vitest.test.ts")
+        tested_by = [e for e in edges if e.kind == "TESTED_BY"]
+        assert len(tested_by) >= 1, (
+            f"Expected TESTED_BY edges, got none. "
+            f"All edges: {[(e.kind, e.source, e.target) for e in edges]}"
+        )
+
+    def test_non_test_file_describe_not_special(self):
+        """describe() in a non-test file should NOT create Test nodes."""
+        import tempfile
+        code = (
+            b'function describe(name, fn) { fn(); }\n'
+            b'describe("test", () => { console.log("hello"); });\n'
+        )
+        with tempfile.NamedTemporaryFile(suffix=".ts", delete=False, prefix="regular_") as f:
+            f.write(code)
+            tmp_path = Path(f.name)
+        try:
+            nodes, edges = self.parser.parse_file(tmp_path)
+            tests = [n for n in nodes if n.kind == "Test"]
+            assert len(tests) == 0, (
+                f"Non-test file should not have Test nodes, got: {[t.name for t in tests]}"
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)

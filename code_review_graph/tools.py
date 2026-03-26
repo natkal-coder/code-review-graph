@@ -690,6 +690,7 @@ def semantic_search_nodes(
     limit: int = 20,
     repo_root: str | None = None,
     context_files: list[str] | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Search for nodes by name, keyword, or semantic similarity.
 
@@ -802,23 +803,30 @@ def list_graph_stats(repo_root: str | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def embed_graph(repo_root: str | None = None) -> dict[str, Any]:
+def embed_graph(
+    repo_root: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
     """Compute vector embeddings for all graph nodes to enable semantic search.
 
     Requires: `pip install code-review-graph[embeddings]`
-    Uses the all-MiniLM-L6-v2 model (fast, 384-dim).
+    Default model: all-MiniLM-L6-v2. Override via `model` param or
+    CRG_EMBEDDING_MODEL env var.
+    Changing the model re-embeds all nodes automatically.
 
     Only embeds nodes that don't already have up-to-date embeddings.
 
     Args:
         repo_root: Repository root path. Auto-detected if omitted.
+        model: Embedding model name (HuggingFace ID or local path).
+               Falls back to CRG_EMBEDDING_MODEL env var, then all-MiniLM-L6-v2.
 
     Returns:
         Number of nodes embedded and total embedding count.
     """
     store, root = _get_store(repo_root)
     db_path = get_db_path(root)
-    emb_store = EmbeddingStore(db_path)
+    emb_store = EmbeddingStore(db_path, model=model)
     try:
         if not emb_store.available:
             return {
