@@ -8,7 +8,10 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
-import yaml
+try:
+    import yaml  # type: ignore[import-untyped]
+except ImportError:
+    yaml = None  # type: ignore[assignment]
 
 from code_review_graph.eval.benchmarks import (
     build_performance,
@@ -33,8 +36,14 @@ DEFAULT_OUTPUT = Path("evaluate/results")
 DEFAULT_REPOS = Path("evaluate/test_repos")
 
 
+def _require_yaml():
+    if yaml is None:
+        raise ImportError("pyyaml is required: pip install code-review-graph[eval]")
+
+
 def load_config(name: str) -> dict:
     """Load a single benchmark config by name."""
+    _require_yaml()
     path = CONFIGS_DIR / f"{name}.yaml"
     with open(path) as f:
         return yaml.safe_load(f)

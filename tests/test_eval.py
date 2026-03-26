@@ -11,7 +11,13 @@ from code_review_graph.eval.reporter import (
     generate_markdown_report,
     generate_readme_tables,
 )
-from code_review_graph.eval.runner import write_csv
+import pytest
+
+try:
+    from code_review_graph.eval.runner import write_csv
+    _HAS_YAML = True
+except ImportError:
+    _HAS_YAML = False
 from code_review_graph.eval.scorer import (
     compute_mrr,
     compute_precision_recall,
@@ -104,6 +110,7 @@ def test_generate_markdown_report_empty():
 # --- New tests ---
 
 
+@pytest.mark.skipif(not _HAS_YAML, reason="pyyaml not installed")
 def test_load_config():
     """Load a temp YAML config and verify structure."""
     import yaml
@@ -143,6 +150,7 @@ def test_load_config():
         os.unlink(tmp_path)
 
 
+@pytest.mark.skipif(not _HAS_YAML, reason="pyyaml not installed")
 def test_write_csv():
     """Write results to CSV and read back."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -163,6 +171,7 @@ def test_write_csv():
         assert rows[1]["tokens"] == "200"
 
 
+@pytest.mark.skipif(not _HAS_YAML, reason="pyyaml not installed")
 def test_write_csv_empty():
     """Writing empty results should be a no-op."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -233,6 +242,7 @@ def test_generate_full_report():
         assert "testrepo" in report
 
 
+@pytest.mark.skipif(not _HAS_YAML, reason="pyyaml not installed")
 def test_runner_with_mock_repo():
     """Create a tiny git repo with 2 Python files, run benchmarks, verify output."""
     with tempfile.TemporaryDirectory() as tmpdir:

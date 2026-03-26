@@ -194,27 +194,26 @@ def generate_readme_tables(results_dir: str | Path) -> str:
         lines.append("")
         headers = ["Repo", "Impact F1", "Flow Recall", "Search MRR"]
         # Build a per-repo summary
-        repo_data: dict[str, dict[str, str]] = {}
+        repo_data: dict[str, dict[str, object]] = {}
+        mrr_accum: dict[str, list[float]] = {}
         for r in ia_rows:
             repo_data.setdefault(r.get("repo", "?"), {})["f1"] = r.get("f1", "-")
         for r in fc_rows:
             repo_data.setdefault(r.get("repo", "?"), {})["recall"] = r.get("recall", "-")
         for r in sq_rows:
             repo = r.get("repo", "?")
-            repo_data.setdefault(repo, {}).setdefault("mrr_sum", 0.0)
-            repo_data[repo].setdefault("mrr_count", 0)
+            repo_data.setdefault(repo, {})
             try:
-                repo_data[repo]["mrr_sum"] += float(r.get("reciprocal_rank", 0))
-                repo_data[repo]["mrr_count"] += 1
+                mrr_accum.setdefault(repo, []).append(float(r.get("reciprocal_rank", 0)))
             except (ValueError, TypeError):
                 pass
 
         table_rows = []
         for repo, d in sorted(repo_data.items()):
-            mrr_count = d.get("mrr_count", 0)
+            mrr_vals = mrr_accum.get(repo, [])
             mrr = (
-                str(round(d["mrr_sum"] / mrr_count, 3))
-                if mrr_count
+                str(round(sum(mrr_vals) / len(mrr_vals), 3))
+                if mrr_vals
                 else "-"
             )
             table_rows.append([
