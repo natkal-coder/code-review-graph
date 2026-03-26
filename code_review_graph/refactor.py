@@ -192,23 +192,14 @@ def find_dead_code(
         List of dead-code dicts with name, qualified_name, kind, file, line.
     """
     # Query candidate nodes.
-    conditions = ["kind IN ('Function', 'Class')"]
-    params: list[Any] = []
-    if kind:
-        conditions = ["kind = ?"]
-        params.append(kind)
-    if file_pattern:
-        conditions.append("file_path LIKE ?")
-        params.append(f"%{file_pattern}%")
-
-    where = " AND ".join(conditions)
-    sql = f"SELECT * FROM nodes WHERE {where}"  # nosec B608
-    rows = store._conn.execute(sql, params).fetchall()
+    candidates = store.get_nodes_by_kind(
+        kinds=[kind] if kind else ["Function", "Class"],
+        file_pattern=file_pattern,
+    )
 
     dead: list[dict[str, Any]] = []
 
-    for row in rows:
-        node = store._row_to_node(row)
+    for node in candidates:
 
         # Skip test nodes.
         if node.is_test:
@@ -266,34 +257,25 @@ def suggest_refactorings(store: GraphStore) -> list[dict[str, Any]]:
 
     # --- Cross-community move suggestions ---
     # Only attempt if communities table exists and has data.
-    try:
-        community_rows = store._conn.execute(
-            "SELECT id, name FROM communities"
-        ).fetchall()
-    except Exception:
-        # communities table may not exist yet
-        community_rows = []
+    community_rows = store.get_communities_list()
 
     if community_rows:
         # Build node -> community_id mapping.
         node_community: dict[str, int] = {}
         for crow in community_rows:
             cid = crow["id"]
-            members = store._conn.execute(
-                "SELECT qualified_name FROM nodes WHERE community_id = ?", (cid,)
-            ).fetchall()
-            for m in members:
-                node_community[m["qualified_name"]] = cid
+            member_qns = store.get_community_member_qns(cid)
+            for qn in member_qns:
+                node_community[qn] = cid
 
-        community_names: dict[int, str] = {r["id"]: r["name"] for r in community_rows}
+        community_names: dict[int, str] = {
+            r["id"]: r["name"] for r in community_rows
+        }
 
         # Check functions called only by members of a different community.
-        func_rows = store._conn.execute(
-            "SELECT * FROM nodes WHERE kind = 'Function'"
-        ).fetchall()
+        all_funcs = store.get_nodes_by_kind(["Function"])
 
-        for frow in func_rows:
-            fnode = store._row_to_node(frow)
+        for fnode in all_funcs:
             f_community = node_community.get(fnode.qualified_name)
             if f_community is None:
                 continue

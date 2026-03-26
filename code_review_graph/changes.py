@@ -122,12 +122,9 @@ def map_changes_to_nodes(
         nodes = store.get_nodes_by_file(file_path)
         if not nodes:
             # The graph may store absolute paths; try a suffix match.
-            all_file_rows = store._conn.execute(
-                "SELECT DISTINCT file_path FROM nodes WHERE file_path LIKE ?",
-                (f"%{file_path}",),
-            ).fetchall()
-            for row in all_file_rows:
-                nodes.extend(store.get_nodes_by_file(row["file_path"]))
+            matched_paths = store.get_files_matching(file_path)
+            for mp in matched_paths:
+                nodes.extend(store.get_nodes_by_file(mp))
 
         for node in nodes:
             if node.qualified_name in seen:
@@ -162,11 +159,7 @@ def compute_risk_score(store: GraphStore, node: GraphNode) -> float:
     score = 0.0
 
     # --- Flow participation (cap 0.25) ---
-    flow_rows = store._conn.execute(
-        "SELECT COUNT(*) as cnt FROM flow_memberships WHERE node_id = ?",
-        (node.id,),
-    ).fetchone()
-    flow_count = flow_rows["cnt"] if flow_rows else 0
+    flow_count = store.count_flow_memberships(node.id)
     score += min(flow_count * 0.05, 0.25)
 
     # --- Community crossing (cap 0.15) ---
@@ -174,29 +167,14 @@ def compute_risk_score(store: GraphStore, node: GraphNode) -> float:
     caller_edges = [e for e in callers if e.kind == "CALLS"]
 
     cross_community = 0
-    node_community = store._conn.execute(
-        "SELECT community_id FROM nodes WHERE id = ?", (node.id,)
-    ).fetchone()
-    node_cid = (
-        node_community["community_id"]
-        if node_community and node_community["community_id"]
-        else None
-    )
+    node_cid = store.get_node_community_id(node.id)
 
     if node_cid is not None and caller_edges:
         caller_qns = [edge.source_qualified for edge in caller_edges]
-        batch_size = 450
-        for i in range(0, len(caller_qns), batch_size):
-            batch = caller_qns[i:i + batch_size]
-            placeholders = ",".join("?" for _ in batch)
-            rows = store._conn.execute(
-                f"SELECT community_id FROM nodes "  # nosec B608
-                f"WHERE qualified_name IN ({placeholders})",
-                batch,
-            ).fetchall()
-            for row in rows:
-                if row["community_id"] is not None and row["community_id"] != node_cid:
-                    cross_community += 1
+        cid_map = store.get_community_ids_by_qualified_names(caller_qns)
+        for cid in cid_map.values():
+            if cid is not None and cid != node_cid:
+                cross_community += 1
     score += min(cross_community * 0.05, 0.15)
 
     # --- Test coverage ---

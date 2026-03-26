@@ -448,6 +448,9 @@ def store_communities(
     Returns:
         Number of communities stored.
     """
+    # NOTE: store_communities uses _conn directly because it performs
+    # multi-statement batch writes (DELETE + INSERT loop + UPDATE loop)
+    # that are tightly coupled to the DB transaction lifecycle.
     conn = store._conn
 
     # Clear existing data
@@ -502,8 +505,10 @@ def get_communities(
 
     order = "DESC" if sort_by in ("size", "cohesion") else "ASC"
 
-    conn = store._conn
-    rows = conn.execute(
+    # NOTE: get_communities reads the communities table which has no
+    # dedicated GraphStore method (it's a domain-specific table managed
+    # entirely by the communities module).  We use _conn for this query.
+    rows = store._conn.execute(
         f"SELECT * FROM communities WHERE size >= ? ORDER BY {sort_by} {order}",  # nosec B608
         (min_size,),
     ).fetchall()
@@ -511,11 +516,10 @@ def get_communities(
     communities: list[dict[str, Any]] = []
     for row in rows:
         # Fetch member qualified names for this community
-        member_rows = conn.execute(
-            "SELECT qualified_name FROM nodes WHERE community_id = ?",
-            (row["id"],),
-        ).fetchall()
-        member_qns = [_sanitize_name(r["qualified_name"]) for r in member_rows]
+        member_qns = [
+            _sanitize_name(qn)
+            for qn in store.get_community_member_qns(row["id"])
+        ]
 
         communities.append({
             "id": row["id"],

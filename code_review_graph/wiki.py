@@ -102,12 +102,7 @@ def _generate_community_page(store: GraphStore, community: dict[str, Any]) -> st
         community_flows: list[dict] = []
         for flow in all_flows:
             # Check if this flow passes through any community member
-            flow_members = store._conn.execute(
-                "SELECT n.qualified_name FROM flow_memberships fm "
-                "JOIN nodes n ON fm.node_id = n.id WHERE fm.flow_id = ?",
-                (flow["id"],),
-            ).fetchall()
-            flow_qns = {r["qualified_name"] for r in flow_members}
+            flow_qns = store.get_flow_qualified_names(flow["id"])
             if flow_qns & member_set:
                 community_flows.append(flow)
 
@@ -135,32 +130,16 @@ def _generate_community_page(store: GraphStore, community: dict[str, Any]) -> st
         incoming_sources: Counter[str] = Counter()
         if member_qns:
             qns = list(member_qns)
-            batch_size = 450
-            for i in range(0, len(qns), batch_size):
-                batch = qns[i:i + batch_size]
-                placeholders = ",".join("?" for _ in batch)
 
-                # Outgoing: source is a member
-                rows = store._conn.execute(
-                    f"SELECT target_qualified FROM edges "  # nosec B608
-                    f"WHERE source_qualified IN ({placeholders})",
-                    batch,
-                ).fetchall()
-                for r in rows:
-                    t = r["target_qualified"]
-                    if t not in member_set:
-                        outgoing_targets[t] += 1
+            # Outgoing: source is a member
+            for t in store.get_outgoing_targets(qns):
+                if t not in member_set:
+                    outgoing_targets[t] += 1
 
-                # Incoming: target is a member
-                rows = store._conn.execute(
-                    f"SELECT source_qualified FROM edges "  # nosec B608
-                    f"WHERE target_qualified IN ({placeholders})",
-                    batch,
-                ).fetchall()
-                for r in rows:
-                    s = r["source_qualified"]
-                    if s not in member_set:
-                        incoming_sources[s] += 1
+            # Incoming: target is a member
+            for s in store.get_incoming_sources(qns):
+                if s not in member_set:
+                    incoming_sources[s] += 1
 
         if outgoing_targets:
             lines.append("### Outgoing")

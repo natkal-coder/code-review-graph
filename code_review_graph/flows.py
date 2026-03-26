@@ -82,21 +82,15 @@ def detect_entry_points(store: GraphStore) -> list[GraphNode]:
     3. Matches a conventional name pattern (``main``, ``test_*``, etc.).
     """
     # Build a set of all qualified names that are CALLS targets.
-    rows = store._conn.execute(
-        "SELECT DISTINCT target_qualified FROM edges WHERE kind = 'CALLS'"
-    ).fetchall()
-    called_qnames = {row["target_qualified"] for row in rows}
+    called_qnames = store.get_all_call_targets()
 
     # Scan all nodes for entry-point candidates.
-    rows = store._conn.execute(
-        "SELECT * FROM nodes WHERE kind IN ('Function', 'Test')"
-    ).fetchall()
+    candidate_nodes = store.get_nodes_by_kind(["Function", "Test"])
 
     entry_points: list[GraphNode] = []
     seen_qn: set[str] = set()
 
-    for row in rows:
-        node = store._row_to_node(row)
+    for node in candidate_nodes:
         is_entry = False
 
         # True root: no one calls this function.
@@ -229,9 +223,9 @@ def compute_criticality(flow: dict, store: GraphStore) -> float:
     # Resolve nodes once.
     nodes: list[GraphNode] = []
     for nid in node_ids:
-        row = store._conn.execute("SELECT * FROM nodes WHERE id = ?", (nid,)).fetchone()
-        if row:
-            nodes.append(store._row_to_node(row))
+        n = store.get_node_by_id(nid)
+        if n:
+            nodes.append(n)
 
     if not nodes:
         return 0.0
@@ -300,6 +294,9 @@ def store_flows(store: GraphStore, flows: list[dict]) -> int:
 
     Returns the number of flows stored.
     """
+    # NOTE: store_flows uses _conn directly because it performs
+    # multi-statement batch writes (DELETE + INSERT loop) that are
+    # tightly coupled to the DB transaction lifecycle.
     conn = store._conn
 
     # Clear old data.
@@ -363,6 +360,8 @@ def get_flows(
 
     order = "DESC" if sort_by in ("criticality", "depth", "node_count", "file_count") else "ASC"
 
+    # NOTE: get_flows reads from the flows table which is managed by
+    # the flows module; _conn access is documented coupling.
     rows = store._conn.execute(
         f"SELECT * FROM flows ORDER BY {sort_by} {order} LIMIT ?",  # nosec B608
         (limit,),
@@ -391,6 +390,7 @@ def get_flow_by_id(store: GraphStore, flow_id: int) -> Optional[dict]:
     Returns a dict with the flow metadata plus a ``steps`` list containing
     each node's name, kind, file, and line info.
     """
+    # NOTE: get_flow_by_id reads from the flows table; see store_flows note.
     row = store._conn.execute(
         "SELECT * FROM flows WHERE id = ?", (flow_id,)
     ).fetchone()
@@ -402,11 +402,8 @@ def get_flow_by_id(store: GraphStore, flow_id: int) -> Optional[dict]:
     # Build detailed step info.
     steps: list[dict] = []
     for nid in path_ids:
-        nrow = store._conn.execute(
-            "SELECT * FROM nodes WHERE id = ?", (nid,)
-        ).fetchone()
-        if nrow:
-            node = store._row_to_node(nrow)
+        node = store.get_node_by_id(nid)
+        if node:
             steps.append({
                 "node_id": node.id,
                 "name": _sanitize_name(node.name),
@@ -449,24 +446,13 @@ def get_affected_flows(
         return {"affected_flows": [], "total": 0}
 
     # Find node IDs belonging to changed files.
-    placeholders = ",".join("?" for _ in changed_files)
-    node_rows = store._conn.execute(
-        f"SELECT id FROM nodes WHERE file_path IN ({placeholders})",  # nosec B608
-        changed_files,
-    ).fetchall()
-    node_ids = {r["id"] for r in node_rows}
+    node_ids = store.get_node_ids_by_files(changed_files)
 
     if not node_ids:
         return {"affected_flows": [], "total": 0}
 
     # Find flow IDs that contain any of these nodes.
-    nid_placeholders = ",".join("?" for _ in node_ids)
-    flow_rows = store._conn.execute(
-        f"SELECT DISTINCT flow_id FROM flow_memberships "  # nosec B608
-        f"WHERE node_id IN ({nid_placeholders})",
-        list(node_ids),
-    ).fetchall()
-    flow_ids = [r["flow_id"] for r in flow_rows]
+    flow_ids = store.get_flow_ids_by_node_ids(node_ids)
 
     if not flow_ids:
         return {"affected_flows": [], "total": 0}

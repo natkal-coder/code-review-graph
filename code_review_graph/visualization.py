@@ -101,14 +101,7 @@ def export_graph_data(store: GraphStore) -> dict:
     seen_qn: set[str] = set()
 
     # Preload community_id mapping from DB (column may not exist in old schemas)
-    community_map: dict[str, int | None] = {}
-    try:
-        rows = store._conn.execute(
-            "SELECT qualified_name, community_id FROM nodes"
-        ).fetchall()
-        community_map = {r["qualified_name"]: r["community_id"] for r in rows}
-    except Exception:
-        community_map = {}
+    community_map = store.get_all_community_ids()
 
     for file_path in store.get_all_files():
         for gnode in store.get_nodes_by_file(file_path):

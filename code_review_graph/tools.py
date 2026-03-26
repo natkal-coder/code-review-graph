@@ -181,10 +181,7 @@ def build_or_update_graph(
 
         # Compute signatures for nodes that don't have them
         try:
-            rows = store._conn.execute(
-                "SELECT id, name, kind, params, return_type "
-                "FROM nodes WHERE signature IS NULL"
-            ).fetchall()
+            rows = store.get_nodes_without_signature()
             for row in rows:
                 node_id, name, kind, params, ret = (
                     row[0], row[1], row[2], row[3], row[4],
@@ -197,11 +194,8 @@ def build_or_update_graph(
                     sig = f"class {name}"
                 else:
                     sig = name
-                store._conn.execute(
-                    "UPDATE nodes SET signature = ? WHERE id = ?",
-                    (sig[:512], node_id),
-                )
-            store._conn.commit()
+                store.update_node_signature(node_id, sig[:512])
+            store.commit()
         except Exception as e:
             logger.warning("Signature computation failed: %s", e)
             warnings.append(f"Signature computation failed: {e}")
@@ -1042,10 +1036,8 @@ def list_flows(
             for f in flows:
                 ep_id = f.get("entry_point_id")
                 if ep_id is not None:
-                    row = store._conn.execute(
-                        "SELECT kind FROM nodes WHERE id = ?", (ep_id,)
-                    ).fetchone()
-                    if row and row["kind"] == kind:
+                    node_kind = store.get_node_kind_by_id(ep_id)
+                    if node_kind == kind:
                         filtered.append(f)
             flows = filtered[:limit]
 
@@ -1293,10 +1285,8 @@ def get_community_func(
         if include_members:
             cid = community.get("id")
             if cid is not None:
-                rows = store._conn.execute(
-                    "SELECT * FROM nodes WHERE community_id = ?", (cid,)
-                ).fetchall()
-                members = [node_to_dict(store._row_to_node(row)) for row in rows]
+                member_nodes = store.get_nodes_by_community_id(cid)
+                members = [node_to_dict(n) for n in member_nodes]
                 community["member_details"] = members
 
         result = {

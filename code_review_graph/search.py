@@ -31,6 +31,8 @@ def rebuild_fts_index(store: GraphStore) -> int:
     Returns:
         Number of rows indexed.
     """
+    # NOTE: rebuild_fts_index uses store._conn directly because it manages
+    # the FTS5 virtual table DDL, which is tightly coupled to SQLite internals.
     conn = store._conn
 
     # Drop and recreate the FTS table to avoid content-sync mismatch issues
@@ -187,11 +189,9 @@ def _embedding_search(
             # Map qualified names back to node IDs
             id_scores: list[tuple[int, float]] = []
             for qn, score in results:
-                row = store._conn.execute(
-                    "SELECT id FROM nodes WHERE qualified_name = ?", (qn,)
-                ).fetchone()
-                if row:
-                    id_scores.append((row["id"], score))
+                node = store.get_node(qn)
+                if node:
+                    id_scores.append((node.id, score))
             return id_scores
         finally:
             emb_store.close()
@@ -284,6 +284,9 @@ def hybrid_search(
     if not query or not query.strip():
         return []
 
+    # NOTE: hybrid_search uses store._conn for FTS5 and keyword queries
+    # because those operate on the FTS virtual table or need raw Row
+    # access for batch-fetch performance.  This is documented coupling.
     conn = store._conn
     fetch_limit = limit * 3  # Fetch extra to allow for filtering and boosting
 
