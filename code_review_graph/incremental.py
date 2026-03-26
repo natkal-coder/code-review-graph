@@ -452,9 +452,12 @@ def watch(repo_root: Path, store: GraphStore) -> None:
                 return
             if _should_ignore(rel, ignore_patterns):
                 return
-            store.remove_file_data(event.src_path)
-            store.commit()
-            logger.info("Removed: %s", rel)
+            try:
+                store.remove_file_data(event.src_path)
+                store.commit()
+                logger.info("Removed: %s", rel)
+            except Exception as e:
+                logger.error("Error removing %s: %s", rel, e)
 
         def _schedule(self, abs_path: str):
             """Add file to pending set and reset the debounce timer."""

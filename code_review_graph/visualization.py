@@ -8,10 +8,13 @@ with collapsible file clusters, tooltips, legend, and stats bar.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict
 from pathlib import Path
 
 from .graph import GraphStore, edge_to_dict, node_to_dict
+
+logger = logging.getLogger(__name__)
 
 
 def _build_name_index(
@@ -164,6 +167,12 @@ def generate_html(store: GraphStore, output_path: str | Path) -> Path:
     Writes the HTML file to *output_path* and returns the resolved Path.
     """
     output_path = Path(output_path)
+    stats = store.get_stats()
+    if stats.total_nodes > 50000:
+        logger.warning(
+            "Graph has %d nodes — visualization may be slow. "
+            "Consider filtering by file pattern.", stats.total_nodes,
+        )
     data = export_graph_data(store)
     # Escape </script> inside JSON to prevent premature tag closure (XSS defense)
     data_json = json.dumps(data, default=str).replace("</", "<\\/")

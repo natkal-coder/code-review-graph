@@ -131,16 +131,36 @@ def _generate_community_page(store: GraphStore, community: dict[str, Any]) -> st
     lines.append("## Dependencies")
     lines.append("")
     try:
-        all_edges = store.get_all_edges()
         outgoing_targets: Counter[str] = Counter()
         incoming_sources: Counter[str] = Counter()
-        for e in all_edges:
-            src_in = e.source_qualified in member_set
-            tgt_in = e.target_qualified in member_set
-            if src_in and not tgt_in:
-                outgoing_targets[e.target_qualified] += 1
-            elif tgt_in and not src_in:
-                incoming_sources[e.source_qualified] += 1
+        if member_qns:
+            qns = list(member_qns)
+            batch_size = 450
+            for i in range(0, len(qns), batch_size):
+                batch = qns[i:i + batch_size]
+                placeholders = ",".join("?" for _ in batch)
+
+                # Outgoing: source is a member
+                rows = store._conn.execute(
+                    f"SELECT target_qualified FROM edges "  # nosec B608
+                    f"WHERE source_qualified IN ({placeholders})",
+                    batch,
+                ).fetchall()
+                for r in rows:
+                    t = r["target_qualified"]
+                    if t not in member_set:
+                        outgoing_targets[t] += 1
+
+                # Incoming: target is a member
+                rows = store._conn.execute(
+                    f"SELECT source_qualified FROM edges "  # nosec B608
+                    f"WHERE target_qualified IN ({placeholders})",
+                    batch,
+                ).fetchall()
+                for r in rows:
+                    s = r["source_qualified"]
+                    if s not in member_set:
+                        incoming_sources[s] += 1
 
         if outgoing_targets:
             lines.append("### Outgoing")

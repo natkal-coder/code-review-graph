@@ -14,6 +14,7 @@ import re
 from collections import deque
 from typing import Optional
 
+from .constants import SECURITY_KEYWORDS as _SECURITY_KEYWORDS
 from .graph import GraphNode, GraphStore, _sanitize_name
 
 logger = logging.getLogger(__name__)
@@ -43,13 +44,6 @@ _ENTRY_NAME_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"^on_"),
     re.compile(r"^handle_"),
 ]
-
-# Keywords that contribute to the security sensitivity score.
-_SECURITY_KEYWORDS: set[str] = {
-    "auth", "login", "password", "token", "session", "crypt", "secret",
-    "credential", "permission", "sql", "query", "execute", "connect",
-    "socket", "request", "http",
-}
 
 
 # ---------------------------------------------------------------------------

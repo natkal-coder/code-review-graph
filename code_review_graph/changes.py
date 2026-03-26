@@ -12,6 +12,7 @@ import re
 import subprocess
 from typing import Any
 
+from .constants import SECURITY_KEYWORDS as _SECURITY_KEYWORDS
 from .flows import get_affected_flows
 from .graph import GraphNode, GraphStore, _sanitize_name, node_to_dict
 
@@ -20,14 +21,6 @@ logger = logging.getLogger(__name__)
 _GIT_TIMEOUT = int(os.environ.get("CRG_GIT_TIMEOUT", "30"))  # seconds, configurable
 
 _SAFE_GIT_REF = re.compile(r"^[A-Za-z0-9_.~^/@{}\-]+$")
-
-# Security-sensitive keywords that increase a node's risk score.
-_SECURITY_KEYWORDS: set[str] = {
-    "auth", "login", "password", "token", "session", "crypt", "secret",
-    "credential", "permission", "sql", "query", "execute", "connect",
-    "socket", "request", "http", "sanitize", "validate", "encrypt",
-    "decrypt", "hash", "sign", "verify", "admin", "privilege",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -190,14 +183,19 @@ def compute_risk_score(store: GraphStore, node: GraphNode) -> float:
         else None
     )
 
-    if node_cid is not None:
-        for edge in caller_edges:
-            caller_row = store._conn.execute(
-                "SELECT community_id FROM nodes WHERE qualified_name = ?",
-                (edge.source_qualified,),
-            ).fetchone()
-            if caller_row and caller_row["community_id"] is not None:
-                if caller_row["community_id"] != node_cid:
+    if node_cid is not None and caller_edges:
+        caller_qns = [edge.source_qualified for edge in caller_edges]
+        batch_size = 450
+        for i in range(0, len(caller_qns), batch_size):
+            batch = caller_qns[i:i + batch_size]
+            placeholders = ",".join("?" for _ in batch)
+            rows = store._conn.execute(
+                f"SELECT community_id FROM nodes "  # nosec B608
+                f"WHERE qualified_name IN ({placeholders})",
+                batch,
+            ).fetchall()
+            for row in rows:
+                if row["community_id"] is not None and row["community_id"] != node_cid:
                     cross_community += 1
     score += min(cross_community * 0.05, 0.15)
 

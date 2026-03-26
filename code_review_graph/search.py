@@ -315,16 +315,28 @@ def hybrid_search(
             return []
         merged = keyword_results
 
-    # ------ Phase 3: Apply kind and context boosting ------
+    # ------ Phase 3+4: Batch-fetch nodes, apply boosting and kind filter ------
     kind_boosts = detect_query_kind_boost(query)
     context_set = set(context_files) if context_files else set()
 
+    # Batch-fetch all candidate nodes in one query
+    candidate_ids = [node_id for node_id, _ in merged]
+    node_rows: dict[int, Any] = {}
+    batch_size = 450
+    for i in range(0, len(candidate_ids), batch_size):
+        batch = candidate_ids[i:i + batch_size]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"SELECT * FROM nodes WHERE id IN ({placeholders})",  # nosec B608
+            batch,
+        ).fetchall()
+        for row in rows:
+            node_rows[row["id"]] = row
+
+    # Apply boosting
     boosted: list[tuple[int, float]] = []
     for node_id, score in merged:
-        row = conn.execute(
-            "SELECT kind, file_path, qualified_name FROM nodes WHERE id = ?",
-            (node_id,),
-        ).fetchone()
+        row = node_rows.get(node_id)
         if not row:
             continue
 
@@ -333,33 +345,25 @@ def hybrid_search(
         qualified_name = row["qualified_name"]
 
         boost = 1.0
-
-        # Kind boosting
         if node_kind in kind_boosts:
             boost *= kind_boosts[node_kind]
-
-        # Qualified name boosting for dotted queries
         if "_qualified" in kind_boosts and '.' in query:
-            q_lower = query.lower()
-            if q_lower in qualified_name.lower():
+            if query.lower() in qualified_name.lower():
                 boost *= kind_boosts["_qualified"]
-
-        # Context file boosting
         if context_set and file_path in context_set:
             boost *= 1.5
 
         boosted.append((node_id, score * boost))
 
-    # Sort by boosted score descending
     boosted.sort(key=lambda x: x[1], reverse=True)
 
-    # ------ Phase 4: Fetch full node data and apply kind filter ------
+    # Build results from the already-fetched rows
     results: list[dict[str, Any]] = []
     for node_id, final_score in boosted:
         if len(results) >= limit:
             break
 
-        row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        row = node_rows.get(node_id)
         if not row:
             continue
 
