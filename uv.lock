@@ -279,6 +279,7 @@ all = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "ollama" },
+    { name = "pyyaml" },
     { name = "sentence-transformers" },
 ]
 communities = [
@@ -296,6 +297,7 @@ embeddings = [
 ]
 eval = [
     { name = "matplotlib" },
+    { name = "pyyaml" },
 ]
 google-embeddings = [
     { name = "google-generativeai" },
@@ -320,6 +322,7 @@ requires-dist = [
     { name = "ollama", marker = "extra == 'wiki'", specifier = ">=0.1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0,<9" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23,<1" },
+    { name = "pyyaml", marker = "extra == 'eval'", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0,<1" },
     { name = "sentence-transformers", marker = "extra == 'embeddings'", specifier = ">=3.0.0,<4" },
     { name = "tree-sitter", specifier = ">=0.23.0,<1" },
