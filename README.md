@@ -26,12 +26,12 @@ Claude Code re-reads your entire codebase on every task. `code-review-graph` fix
 ## Quick Start
 
 ```bash
-pip install code-review-graph
+pip install code-review-graph                     # or: pipx install code-review-graph
 code-review-graph install          # auto-detects and configures all supported platforms
 code-review-graph build            # parse your codebase
 ```
 
-One command sets up everything. `install` detects which AI coding tools you have and writes the correct MCP configuration for each one. Restart your editor/tool after installing.
+One command sets up everything. `install` detects which AI coding tools you have and writes the correct MCP configuration for each one. It auto-detects whether you installed via `uvx` or `pip`/`pipx` and generates the right config. Restart your editor/tool after installing.
 
 To target a specific platform:
 
@@ -40,7 +40,7 @@ code-review-graph install --platform cursor      # configure only Cursor
 code-review-graph install --platform claude-code  # configure only Claude Code
 ```
 
-Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.10+. For the best experience, install [uv](https://docs.astral.sh/uv/) (the MCP config will use `uvx` if available, otherwise falls back to the `code-review-graph` command directly).
 
 ### Supported Platforms
 
@@ -52,6 +52,7 @@ Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 | **Zed** | `.zed/settings.json` | Yes |
 | **Continue** | `.continue/config.json` | Yes |
 | **OpenCode** | `.opencode/config.json` | Yes |
+| **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | Yes |
 
 Then open your project and ask your AI assistant:
 
@@ -96,10 +97,12 @@ On every git commit or file save, a hook fires. The graph diffs changed files, f
 </details>
 
 <details>
-<summary><strong>19 supported languages</strong></summary>
+<summary><strong>19 supported languages + Jupyter notebooks</strong></summary>
 <br>
 
 Python, TypeScript/TSX, JavaScript, Vue, Go, Rust, Java, Scala, C#, Ruby, Kotlin, Swift, PHP, Solidity, C/C++, Dart, R, Perl, Lua
+
+Plus Jupyter/Databricks notebook parsing (`.ipynb`) with multi-language cell support (Python, R, SQL), and Perl XS files (`.xs`, parsed as C).
 
 Each language has full Tree-sitter grammar support for functions, classes, imports, call sites, inheritance, and test detection.
 
@@ -256,7 +259,7 @@ Claude uses these automatically once the graph is built.
 | Feature | Details |
 |---------|---------|
 | **Incremental updates** | Re-parses only changed files. Subsequent updates complete in under 2 seconds. |
-| **19 languages** | Python, TypeScript/TSX, JavaScript, Vue, Go, Rust, Java, Scala, C#, Ruby, Kotlin, Swift, PHP, Solidity, C/C++, Dart, R, Perl, Lua |
+| **19 languages + notebooks** | Python, TypeScript/TSX, JavaScript, Vue, Go, Rust, Java, Scala, C#, Ruby, Kotlin, Swift, PHP, Solidity, C/C++, Dart, R, Perl, Lua, Jupyter/Databricks (.ipynb) |
 | **Blast-radius analysis** | Shows exactly which functions, classes, and files are affected by any change |
 | **Auto-update hooks** | Graph updates on every file edit and git commit without manual intervention |
 | **Semantic search** | Optional vector embeddings via sentence-transformers, Google Gemini, or MiniMax |
