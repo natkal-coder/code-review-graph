@@ -85,6 +85,7 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".pm": "perl",
     ".t": "perl",
     ".xs": "c",  # Perl XS: parsed as C to capture functions/structs/includes
+    ".lua": "lua",
 }
 
 # Tree-sitter node type mappings per language
@@ -118,6 +119,7 @@ _CLASS_TYPES: dict[str, list[str]] = {
         "user_defined_type_definition",
     ],
     "dart": ["class_definition", "mixin_declaration", "enum_declaration"],
+    "lua": [],  # Lua has no class keyword; table-based OOP handled via constructs handler
 }
 
 _FUNCTION_TYPES: dict[str, list[str]] = {
@@ -151,6 +153,7 @@ _FUNCTION_TYPES: dict[str, list[str]] = {
     # the parser recurses into method_signature generically and then matches
     # function_signature inside it).
     "dart": ["function_signature"],
+    "lua": ["function_declaration"],
 }
 
 _IMPORT_TYPES: dict[str, list[str]] = {
@@ -174,6 +177,8 @@ _IMPORT_TYPES: dict[str, list[str]] = {
     "solidity": ["import_directive"],
     # Dart: import_or_export wraps library_import > import_specification > configurable_uri
     "dart": ["import_or_export"],
+    # Lua: require() is a function_call, handled via _extract_lua_constructs
+    "lua": [],
 }
 
 _CALL_TYPES: dict[str, list[str]] = {
@@ -198,6 +203,7 @@ _CALL_TYPES: dict[str, list[str]] = {
     "php": ["function_call_expression", "member_call_expression"],
     "scala": ["call_expression", "instance_expression", "generic_function"],
     "solidity": ["call_expression"],
+    "lua": ["function_call"],
 }
 
 # Patterns that indicate a test function
@@ -552,6 +558,14 @@ class CodeParser:
             ):
                 continue
 
+            # --- Lua-specific constructs ---
+            if language == "lua" and self._extract_lua_constructs(
+                child, node_type, source, language, file_path,
+                nodes, edges, enclosing_class, enclosing_func,
+                import_map, defined_names, _depth,
+            ):
+                continue
+
             # --- Classes ---
             if node_type in class_types and self._extract_classes(
                 child, source, language, file_path, nodes, edges,
@@ -640,6 +654,285 @@ class CodeParser:
                 return True
 
         return False
+
+    # ------------------------------------------------------------------
+    # Lua-specific helpers
+    # ------------------------------------------------------------------
+
+    def _extract_lua_constructs(
+        self,
+        child,
+        node_type: str,
+        source: bytes,
+        language: str,
+        file_path: str,
+        nodes: list[NodeInfo],
+        edges: list[EdgeInfo],
+        enclosing_class: Optional[str],
+        enclosing_func: Optional[str],
+        import_map: Optional[dict[str, str]],
+        defined_names: Optional[set[str]],
+        _depth: int,
+    ) -> bool:
+        """Handle Lua-specific AST constructs.
+
+        Returns True if the child was fully handled and should be skipped
+        by the main loop.
+
+        Handles:
+        - variable_declaration with require() -> IMPORTS_FROM edge
+        - variable_declaration with function_definition -> named Function node
+        - function_declaration with dot/method name -> Function with table parent
+        - top-level require() call -> IMPORTS_FROM edge
+        """
+        # --- variable_declaration: require() or anonymous function ---
+        if node_type == "variable_declaration":
+            return self._handle_lua_variable_declaration(
+                child, source, language, file_path, nodes, edges,
+                enclosing_class, enclosing_func,
+                import_map, defined_names, _depth,
+            )
+
+        # --- function_declaration with dot/method table name ---
+        if node_type == "function_declaration":
+            return self._handle_lua_table_function(
+                child, source, language, file_path, nodes, edges,
+                enclosing_class, enclosing_func,
+                import_map, defined_names, _depth,
+            )
+
+        # --- Top-level require() not wrapped in variable_declaration ---
+        if node_type == "function_call" and not enclosing_func:
+            req_target = self._lua_get_require_target(child)
+            if req_target is not None:
+                resolved = self._resolve_module_to_file(
+                    req_target, file_path, language,
+                )
+                edges.append(EdgeInfo(
+                    kind="IMPORTS_FROM",
+                    source=file_path,
+                    target=resolved if resolved else req_target,
+                    file_path=file_path,
+                    line=child.start_point[0] + 1,
+                ))
+                return True
+
+        return False
+
+    def _handle_lua_variable_declaration(
+        self,
+        child,
+        source: bytes,
+        language: str,
+        file_path: str,
+        nodes: list[NodeInfo],
+        edges: list[EdgeInfo],
+        enclosing_class: Optional[str],
+        enclosing_func: Optional[str],
+        import_map: Optional[dict[str, str]],
+        defined_names: Optional[set[str]],
+        _depth: int,
+    ) -> bool:
+        """Handle Lua variable declarations that contain require() or
+        anonymous function definitions.
+
+        ``local json = require("json")``  -> IMPORTS_FROM edge
+        ``local fn = function(x) ... end`` -> Function node named "fn"
+        """
+        # Walk into: variable_declaration > assignment_statement
+        assign = None
+        for sub in child.children:
+            if sub.type == "assignment_statement":
+                assign = sub
+                break
+        if not assign:
+            return False
+
+        # Get variable name from variable_list
+        var_name = None
+        for sub in assign.children:
+            if sub.type == "variable_list":
+                for ident in sub.children:
+                    if ident.type == "identifier":
+                        var_name = ident.text.decode("utf-8", errors="replace")
+                        break
+                break
+
+        # Get value from expression_list
+        expr_list = None
+        for sub in assign.children:
+            if sub.type == "expression_list":
+                expr_list = sub
+                break
+
+        if not var_name or not expr_list:
+            return False
+
+        # Check for require() call
+        for expr in expr_list.children:
+            if expr.type == "function_call":
+                req_target = self._lua_get_require_target(expr)
+                if req_target is not None:
+                    resolved = self._resolve_module_to_file(
+                        req_target, file_path, language,
+                    )
+                    edges.append(EdgeInfo(
+                        kind="IMPORTS_FROM",
+                        source=file_path,
+                        target=resolved if resolved else req_target,
+                        file_path=file_path,
+                        line=child.start_point[0] + 1,
+                    ))
+                    return True
+
+        # Check for anonymous function: local foo = function(...) end
+        for expr in expr_list.children:
+            if expr.type == "function_definition":
+                is_test = _is_test_function(var_name, file_path)
+                kind = "Test" if is_test else "Function"
+                qualified = self._qualify(var_name, file_path, enclosing_class)
+                params = self._get_params(expr, language, source)
+
+                nodes.append(NodeInfo(
+                    kind=kind,
+                    name=var_name,
+                    file_path=file_path,
+                    line_start=child.start_point[0] + 1,
+                    line_end=child.end_point[0] + 1,
+                    language=language,
+                    parent_name=enclosing_class,
+                    params=params,
+                    is_test=is_test,
+                ))
+                container = (
+                    self._qualify(enclosing_class, file_path, None)
+                    if enclosing_class else file_path
+                )
+                edges.append(EdgeInfo(
+                    kind="CONTAINS",
+                    source=container,
+                    target=qualified,
+                    file_path=file_path,
+                    line=child.start_point[0] + 1,
+                ))
+                # Recurse into the function body for calls
+                self._extract_from_tree(
+                    expr, source, language, file_path, nodes, edges,
+                    enclosing_class=enclosing_class,
+                    enclosing_func=var_name,
+                    import_map=import_map,
+                    defined_names=defined_names,
+                    _depth=_depth + 1,
+                )
+                return True
+
+        return False
+
+    def _handle_lua_table_function(
+        self,
+        child,
+        source: bytes,
+        language: str,
+        file_path: str,
+        nodes: list[NodeInfo],
+        edges: list[EdgeInfo],
+        enclosing_class: Optional[str],
+        enclosing_func: Optional[str],
+        import_map: Optional[dict[str, str]],
+        defined_names: Optional[set[str]],
+        _depth: int,
+    ) -> bool:
+        """Handle Lua function declarations with table-qualified names.
+
+        ``function Animal.new(name)``  -> Function "new", parent "Animal"
+        ``function Animal:speak()``    -> Function "speak", parent "Animal"
+
+        Plain ``function foo()`` is NOT handled here (returns False).
+        """
+        table_name = None
+        method_name = None
+
+        for sub in child.children:
+            if sub.type in ("dot_index_expression", "method_index_expression"):
+                identifiers = [
+                    c for c in sub.children if c.type == "identifier"
+                ]
+                if len(identifiers) >= 2:
+                    table_name = identifiers[0].text.decode(
+                        "utf-8", errors="replace",
+                    )
+                    method_name = identifiers[-1].text.decode(
+                        "utf-8", errors="replace",
+                    )
+                break
+
+        if not table_name or not method_name:
+            return False
+
+        is_test = _is_test_function(method_name, file_path)
+        kind = "Test" if is_test else "Function"
+        qualified = self._qualify(method_name, file_path, table_name)
+        params = self._get_params(child, language, source)
+
+        nodes.append(NodeInfo(
+            kind=kind,
+            name=method_name,
+            file_path=file_path,
+            line_start=child.start_point[0] + 1,
+            line_end=child.end_point[0] + 1,
+            language=language,
+            parent_name=table_name,
+            params=params,
+            is_test=is_test,
+        ))
+        # CONTAINS: table -> method
+        container = self._qualify(table_name, file_path, None)
+        edges.append(EdgeInfo(
+            kind="CONTAINS",
+            source=container,
+            target=qualified,
+            file_path=file_path,
+            line=child.start_point[0] + 1,
+        ))
+        # Recurse into function body for calls
+        self._extract_from_tree(
+            child, source, language, file_path, nodes, edges,
+            enclosing_class=table_name,
+            enclosing_func=method_name,
+            import_map=import_map,
+            defined_names=defined_names,
+            _depth=_depth + 1,
+        )
+        return True
+
+    @staticmethod
+    def _lua_get_require_target(call_node) -> Optional[str]:
+        """Extract the module path from a Lua require() call.
+
+        Returns the string argument or None if this is not a require() call.
+        """
+        # Structure: function_call > identifier("require") > arguments > string
+        first_child = call_node.children[0] if call_node.children else None
+        if (
+            not first_child
+            or first_child.type != "identifier"
+            or first_child.text != b"require"
+        ):
+            return None
+        for child in call_node.children:
+            if child.type == "arguments":
+                for arg in child.children:
+                    if arg.type == "string":
+                        # String node has string_content child
+                        for sub in arg.children:
+                            if sub.type == "string_content":
+                                return sub.text.decode(
+                                    "utf-8", errors="replace",
+                                )
+                        # Fallback: strip quotes from full text
+                        raw = arg.text.decode("utf-8", errors="replace")
+                        return raw.strip("'\"")
+        return None
 
     def _extract_classes(
         self,
@@ -1316,6 +1609,18 @@ class CodeParser:
                 for child in node.children:
                     if child.type in ("receive", "fallback"):
                         return child.text.decode("utf-8", errors="replace")
+        # Lua: function_declaration names may be dot_index_expression or
+        # method_index_expression (e.g. function Animal.new() / Animal:speak()).
+        # Return only the method name; the table name is used as parent_name
+        # in _extract_lua_constructs.
+        if language == "lua" and node.type == "function_declaration":
+            for child in node.children:
+                if child.type in ("dot_index_expression", "method_index_expression"):
+                    # Last identifier child is the method name
+                    for sub in reversed(child.children):
+                        if sub.type == "identifier":
+                            return sub.text.decode("utf-8", errors="replace")
+                    return None
         # Perl: bareword for subroutine names, package for package names
         if language == "perl":
             for child in node.children:
@@ -1611,6 +1916,16 @@ class CodeParser:
         # Perl: function_call_expression / ambiguous_function_call_expression
         if first.type == "function":
             return first.text.decode("utf-8", errors="replace")
+
+        # Lua: dot_index_expression (obj.method) and method_index_expression
+        # (obj:method) — extract the rightmost identifier as the call name.
+        if language == "lua" and first.type in (
+            "dot_index_expression", "method_index_expression",
+        ):
+            for child in reversed(first.children):
+                if child.type == "identifier":
+                    return child.text.decode("utf-8", errors="replace")
+            return None
 
         # Method call: obj.method(args)
         member_types = (

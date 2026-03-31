@@ -7,7 +7,7 @@
 ## Architecture
 
 - **Core Package**: `code_review_graph/` (Python 3.10+)
-  - `parser.py` — Tree-sitter multi-language AST parser (18 languages including Vue SFC, Solidity, Dart, R, Perl)
+  - `parser.py` — Tree-sitter multi-language AST parser (19 languages including Vue SFC, Solidity, Dart, R, Perl, Lua)
   - `graph.py` — SQLite-backed graph store (nodes, edges, BFS impact analysis)
   - `tools.py` — 22 MCP tool implementations
   - `main.py` — FastMCP server entry point (stdio transport), registers 22 tools + 5 prompts
@@ -81,7 +81,7 @@ uv run code-review-graph eval               # Run evaluation benchmarks
 - `tests/test_tools.py` — MCP tool integration tests
 - `tests/test_visualization.py` — Export, HTML generation, C++ resolution
 - `tests/test_incremental.py` — Build, update, migration, git ops
-- `tests/test_multilang.py` — 18 language parsing tests (including Vue, Solidity, Dart, R, Perl, XS)
+- `tests/test_multilang.py` — 19 language parsing tests (including Vue, Solidity, Dart, R, Perl, XS, Lua)
 - `tests/test_embeddings.py` — Vector encode/decode, similarity, store
 - `tests/test_flows.py` — Execution flow detection and criticality
 - `tests/test_communities.py` — Community detection, architecture overview
