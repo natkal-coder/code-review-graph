@@ -403,26 +403,57 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 """
 
 
-def inject_claude_md(repo_root: Path) -> None:
-    """Append MCP tools section to CLAUDE.md.
+def _inject_instructions(file_path: Path, marker: str, section: str) -> bool:
+    """Append an instruction section to a file if not already present.
 
-    Idempotent: checks if the section marker is already present
-    before appending.
+    Idempotent: checks if the marker is already present before appending.
+    Creates the file if it doesn't exist.
 
-    Args:
-        repo_root: Repository root directory.
+    Returns True if the file was modified.
     """
-    claude_md_path = repo_root / "CLAUDE.md"
-
     existing = ""
-    if claude_md_path.exists():
-        existing = claude_md_path.read_text()
+    if file_path.exists():
+        existing = file_path.read_text()
 
-    if _CLAUDE_MD_SECTION_MARKER in existing:
-        logger.info("CLAUDE.md already contains MCP tools section, skipping.")
-        return
+    if marker in existing:
+        logger.info("%s already contains instructions, skipping.", file_path.name)
+        return False
 
     separator = "\n" if existing and not existing.endswith("\n") else ""
     extra_newline = "\n" if existing else ""
-    claude_md_path.write_text(existing + separator + extra_newline + _CLAUDE_MD_SECTION)
-    logger.info("Appended MCP tools section to %s", claude_md_path)
+    file_path.write_text(existing + separator + extra_newline + section)
+    logger.info("Appended MCP tools section to %s", file_path)
+    return True
+
+
+def inject_claude_md(repo_root: Path) -> None:
+    """Append MCP tools section to CLAUDE.md."""
+    _inject_instructions(
+        repo_root / "CLAUDE.md", _CLAUDE_MD_SECTION_MARKER, _CLAUDE_MD_SECTION,
+    )
+
+
+# Cross-platform instruction files so every AI coding tool uses the graph.
+_PLATFORM_INSTRUCTION_FILES = {
+    "AGENTS.md": "AGENTS.md",       # Cursor, OpenCode, Antigravity
+    "GEMINI.md": "GEMINI.md",       # Antigravity / Gemini CLI
+    ".cursorrules": ".cursorrules",  # Cursor (legacy, widely used)
+    ".windsurfrules": ".windsurfrules",  # Windsurf
+}
+
+
+def inject_platform_instructions(repo_root: Path) -> list[str]:
+    """Inject 'use graph first' instructions into all platform rule files.
+
+    Generates AGENTS.md, GEMINI.md, .cursorrules, and .windsurfrules
+    with instructions to prefer code-review-graph MCP tools over
+    manual file scanning.
+
+    Returns list of files that were created or updated.
+    """
+    updated: list[str] = []
+    for label, filename in _PLATFORM_INSTRUCTION_FILES.items():
+        path = repo_root / filename
+        if _inject_instructions(path, _CLAUDE_MD_SECTION_MARKER, _CLAUDE_MD_SECTION):
+            updated.append(label)
+    return updated

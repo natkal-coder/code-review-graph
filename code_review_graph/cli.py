@@ -125,13 +125,18 @@ def _handle_init(args: argparse.Namespace) -> None:
     skip_hooks = getattr(args, "no_hooks", False)
     # Legacy: --skills/--hooks/--all still accepted (no-op, everything is default)
 
-    from .skills import generate_skills, inject_claude_md, install_hooks
+    from .skills import (
+        generate_skills, inject_claude_md, inject_platform_instructions,
+        install_hooks,
+    )
 
     if not skip_skills:
         skills_dir = generate_skills(repo_root)
         print(f"Generated skills in {skills_dir}")
         inject_claude_md(repo_root)
-        print("Updated CLAUDE.md with MCP tools reference")
+        updated = inject_platform_instructions(repo_root)
+        if updated:
+            print(f"Injected graph instructions into: {', '.join(updated)}")
 
     if not skip_hooks:
         install_hooks(repo_root)
@@ -140,7 +145,7 @@ def _handle_init(args: argparse.Namespace) -> None:
     print()
     print("Next steps:")
     print("  1. code-review-graph build    # build the knowledge graph")
-    print("  2. Restart Claude Code        # to pick up the new MCP server")
+    print("  2. Restart your AI coding tool to pick up the new config")
 
 
 def main() -> None:
