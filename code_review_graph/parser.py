@@ -905,11 +905,35 @@ class CodeParser:
             ):
                 continue
 
+            # --- JS/TS variable-assigned functions (const foo = () => {}) ---
+            if (
+                language in ("javascript", "typescript", "tsx")
+                and node_type in ("lexical_declaration", "variable_declaration")
+                and self._extract_js_var_functions(
+                    child, source, language, file_path, nodes, edges,
+                    enclosing_class, enclosing_func,
+                    import_map, defined_names, _depth,
+                )
+            ):
+                continue
+
             # --- Classes ---
             if node_type in class_types and self._extract_classes(
                 child, source, language, file_path, nodes, edges,
                 enclosing_class, import_map, defined_names,
                 _depth,
+            ):
+                continue
+
+            # --- JS/TS class field arrow functions (handler = () => {}) ---
+            if (
+                language in ("javascript", "typescript", "tsx")
+                and node_type == "public_field_definition"
+                and self._extract_js_field_function(
+                    child, source, language, file_path, nodes, edges,
+                    enclosing_class, enclosing_func,
+                    import_map, defined_names, _depth,
+                )
             ):
                 continue
 
@@ -1272,6 +1296,165 @@ class CodeParser:
                         raw = arg.text.decode("utf-8", errors="replace")
                         return raw.strip("'\"")
         return None
+
+    # ------------------------------------------------------------------
+    # JS/TS: variable-assigned functions  (const foo = () => {})
+    # ------------------------------------------------------------------
+
+    _JS_FUNC_VALUE_TYPES = frozenset(
+        {"arrow_function", "function_expression", "function"},
+    )
+
+    def _extract_js_var_functions(
+        self,
+        child,
+        source: bytes,
+        language: str,
+        file_path: str,
+        nodes: list[NodeInfo],
+        edges: list[EdgeInfo],
+        enclosing_class: Optional[str],
+        enclosing_func: Optional[str],
+        import_map: Optional[dict[str, str]],
+        defined_names: Optional[set[str]],
+        _depth: int,
+    ) -> bool:
+        """Handle JS/TS variable declarations that assign functions.
+
+        Patterns handled:
+          const foo = () => {}
+          let bar = function() {}
+          export const baz = (x: number): string => x.toString()
+
+        Returns True if at least one function was extracted from the
+        declaration, so the caller can skip generic recursion.
+        """
+        handled = False
+        for declarator in child.children:
+            if declarator.type != "variable_declarator":
+                continue
+
+            # Find identifier and function value
+            var_name = None
+            func_node = None
+            for sub in declarator.children:
+                if sub.type == "identifier" and var_name is None:
+                    var_name = sub.text.decode("utf-8", errors="replace")
+                elif sub.type in self._JS_FUNC_VALUE_TYPES:
+                    func_node = sub
+
+            if not var_name or not func_node:
+                continue
+
+            is_test = _is_test_function(var_name, file_path)
+            kind = "Test" if is_test else "Function"
+            qualified = self._qualify(var_name, file_path, enclosing_class)
+            params = self._get_params(func_node, language, source)
+            ret_type = self._get_return_type(func_node, language, source)
+
+            nodes.append(NodeInfo(
+                kind=kind,
+                name=var_name,
+                file_path=file_path,
+                line_start=child.start_point[0] + 1,
+                line_end=child.end_point[0] + 1,
+                language=language,
+                parent_name=enclosing_class,
+                params=params,
+                return_type=ret_type,
+                is_test=is_test,
+            ))
+            container = (
+                self._qualify(enclosing_class, file_path, None)
+                if enclosing_class else file_path
+            )
+            edges.append(EdgeInfo(
+                kind="CONTAINS",
+                source=container,
+                target=qualified,
+                file_path=file_path,
+                line=child.start_point[0] + 1,
+            ))
+
+            # Recurse into the function body for calls
+            self._extract_from_tree(
+                func_node, source, language, file_path, nodes, edges,
+                enclosing_class=enclosing_class,
+                enclosing_func=var_name,
+                import_map=import_map,
+                defined_names=defined_names,
+                _depth=_depth + 1,
+            )
+            handled = True
+
+        if not handled:
+            # Not a function assignment — let generic recursion handle it
+            return False
+        return True
+
+    def _extract_js_field_function(
+        self,
+        child,
+        source: bytes,
+        language: str,
+        file_path: str,
+        nodes: list[NodeInfo],
+        edges: list[EdgeInfo],
+        enclosing_class: Optional[str],
+        enclosing_func: Optional[str],
+        import_map: Optional[dict[str, str]],
+        defined_names: Optional[set[str]],
+        _depth: int,
+    ) -> bool:
+        """Handle class field arrow functions: handler = (e) => { ... }"""
+        prop_name = None
+        func_node = None
+        for sub in child.children:
+            if sub.type == "property_identifier" and prop_name is None:
+                prop_name = sub.text.decode("utf-8", errors="replace")
+            elif sub.type in self._JS_FUNC_VALUE_TYPES:
+                func_node = sub
+
+        if not prop_name or not func_node:
+            return False
+
+        is_test = _is_test_function(prop_name, file_path)
+        kind = "Test" if is_test else "Function"
+        qualified = self._qualify(prop_name, file_path, enclosing_class)
+        params = self._get_params(func_node, language, source)
+
+        nodes.append(NodeInfo(
+            kind=kind,
+            name=prop_name,
+            file_path=file_path,
+            line_start=child.start_point[0] + 1,
+            line_end=child.end_point[0] + 1,
+            language=language,
+            parent_name=enclosing_class,
+            params=params,
+            is_test=is_test,
+        ))
+        container = (
+            self._qualify(enclosing_class, file_path, None)
+            if enclosing_class else file_path
+        )
+        edges.append(EdgeInfo(
+            kind="CONTAINS",
+            source=container,
+            target=qualified,
+            file_path=file_path,
+            line=child.start_point[0] + 1,
+        ))
+
+        self._extract_from_tree(
+            func_node, source, language, file_path, nodes, edges,
+            enclosing_class=enclosing_class,
+            enclosing_func=prop_name,
+            import_map=import_map,
+            defined_names=defined_names,
+            _depth=_depth + 1,
+        )
+        return True
 
     def _extract_classes(
         self,
