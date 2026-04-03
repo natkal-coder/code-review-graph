@@ -67,3 +67,12 @@ evaluate/test_repos/
 
 # Draft/duplicate files
 docs/assets/marketing-diagram*
+
+# One-off audit/design docs
+Quality-Audit-Report.docx
+accessibility-audit.md
+cross-audit-synthesis.md
+design-critique.md
+design-handoff.md
+design-system-audit.md
+research-synthesis.md
