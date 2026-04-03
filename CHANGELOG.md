@@ -1,5 +1,47 @@
 # Changelog
 
+## [2.1.0] - 2026-04-03
+
+### Added
+- **Jupyter notebook parsing**: Parse `.ipynb` files — extract functions, classes, imports across Python, R, and SQL cells
+- **Databricks notebook parsing**: Parse Databricks `.py` notebook exports with `# COMMAND ----------` cell boundaries
+- **Lua language support**: Full parsing for `.lua` files (functions, local functions, method calls, requires) — 20th language
+- **Perl XS support**: Parse `.xs` files with improved Perl call detection and test coverage
+- **Zero-config onboarding**: `install` now sets up skills, hooks, and CLAUDE.md by default so the graph is used automatically
+- **Platform rule injection**: Graph instructions injected into all platform rule files (CLAUDE.md, .cursorrules, etc.) on install
+- **Smart install detection**: Auto-detects whether installed via uvx or pip and generates correct `.mcp.json`
+- **`--platform claude-code` alias**: Accepts both `claude` and `claude-code` as platform names
+
+### Fixed
+- **JS/TS arrow functions indexed**: `const foo = () => {}` and `const bar = function() {}` now correctly appear as nodes (#66)
+- **`importers_of` path resolution**: Normalized with `resolve()` to match stored edge targets (#65)
+- **Custom embedding models**: Support for custom model architectures and restored model param wiring in search (#79)
+
+## [2.0.0] - 2026-03-27
+
+### Added
+- **12 new features**: flows, communities, hybrid search, change analysis, refactoring, hints, prompts, skills, wiki, multi-repo registry, migrations, eval framework
+- **14 new modules** (~10,000 lines): `flows.py`, `communities.py`, `search.py`, `changes.py`, `refactor.py`, `hints.py`, `prompts.py`, `skills.py`, `wiki.py`, `registry.py`, `migrations.py`, `eval/`
+- **15 new MCP tools**: `list_flows`, `get_flow`, `get_affected_flows`, `list_communities`, `get_community`, `get_architecture_overview`, `detect_changes`, `refactor`, `apply_refactor`, `generate_wiki`, `get_wiki_page`, `list_repos`, `cross_repo_search`, `find_large_functions`, `semantic_search_nodes`
+- **5 MCP prompts**: `review_changes`, `architecture_map`, `debug_issue`, `onboard_developer`, `pre_merge_check`
+- **7 new CLI commands**: `detect-changes`, `wiki`, `eval`, `register`, `unregister`, `repos`, `install --skills/--hooks/--all`
+- **Interactive visualization upgrade**: Detail panel, community coloring, flow path highlighting, search-to-zoom, kind filters
+
+### Security
+- Fix path traversal in wiki page reader
+- Add regex allowlist for git ref validation
+- Add explicit SSL context for MiniMax API
+
+### Fixed
+- Fix git diff argument ordering (broke incremental updates)
+- Fix `node_qualified_name` schema mismatch in wiki flow query
+- Batch N+1 queries in `get_impact_radius` and risk scoring
+
+### Architecture
+- Decompose `_extract_from_tree` into 6 focused methods
+- Add 17 public query methods to `GraphStore`
+- Split `tools.py` into 10 themed sub-modules
+
 ## [1.8.4] - 2026-03-20
 
 ### Added

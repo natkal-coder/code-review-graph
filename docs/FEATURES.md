@@ -1,6 +1,6 @@
 # Features
 
-## v2.0.0 (Current)
+## v2.1.0 (Current)
 - **22 MCP tools** (up from 9): 13 new tools for flows, communities, architecture, refactoring, wiki, multi-repo, and risk-scored change detection.
 - **5 MCP prompts**: `review_changes`, `architecture_map`, `debug_issue`, `onboard_developer`, `pre_merge_check` workflow templates.
 - **18 languages** (up from 15): Added Dart, R, Perl support.
