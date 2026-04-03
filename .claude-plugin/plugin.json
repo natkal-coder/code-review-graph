@@ -7,7 +7,7 @@
     "email": "tirthkanani18@gmail.com",
     "url": "https://github.com/tirth8205"
   },
-  "homepage": "https://github.com/tirth8205/code-review-graph",
+  "homepage": "https://code-review-graph.com",
   "repository": "https://github.com/tirth8205/code-review-graph",
   "license": "MIT",
   "keywords": ["code-review", "knowledge-graph", "incremental", "tree-sitter", "mcp", "claude-code"],
