@@ -36,7 +36,7 @@ code-review-graph build            # parse your codebase
 One command sets up everything. `install` detects which AI coding tools you have, writes the correct MCP configuration for each one, and injects graph-aware instructions into your platform rules. It auto-detects whether you installed via `uvx` or `pip`/`pipx` and generates the right config. Restart your editor/tool after installing.
 
 <p align="center">
-  <img src="diagrams/diagram8_supported_platforms.png" alt="One Install, Every Platform: auto-detects Claude Code, Cursor, Windsurf, Zed, Continue, OpenCode, and Antigravity" width="85%" />
+  <img src="diagrams/diagram8_supported_platforms.png" alt="One Install, Every Platform: auto-detects Claude Code, Cursor, Gemini CLI, Windsurf, Zed, Continue, OpenCode, and Antigravity" width="85%" />
 </p>
 
 To target a specific platform:
@@ -44,6 +44,7 @@ To target a specific platform:
 ```bash
 code-review-graph install --platform cursor      # configure only Cursor
 code-review-graph install --platform claude-code  # configure only Claude Code
+code-review-graph install --platform gemini-cli   # configure only Gemini CLI
 ```
 
 Requires Python 3.10+. For the best experience, install [uv](https://docs.astral.sh/uv/) (the MCP config will use `uvx` if available, otherwise falls back to the `code-review-graph` command directly).
@@ -55,6 +56,31 @@ Build the code review graph for this project
 ```
 
 The initial build takes ~10 seconds for a 500-file project. After that, the graph updates automatically on every file edit and git commit.
+
+---
+
+## Gemini CLI Setup
+
+Using [Gemini CLI](https://geminicli.com/)? Same integration, same token savings.
+
+```bash
+code-review-graph install --platform gemini-cli  # auto-configures ~/.gemini/settings.json
+```
+
+Once installed, verify the setup in Gemini CLI:
+
+```bash
+gemini /mcp list    # See code-review-graph in your MCP servers
+gemini /mcp reload  # Refresh after updates
+```
+
+Then in your Gemini CLI sessions, ask:
+
+```
+Build the code review graph for this project
+```
+
+All 22 MCP tools are available: `detect_changes` for code review, `get_impact_radius` for blast radius, `semantic_search_nodes` for search, and more. See `GEMINI.md` in your project for Gemini-specific workflows.
 
 ---
 
@@ -328,5 +354,5 @@ MIT. See [LICENSE](LICENSE).
 <br>
 <a href="https://code-review-graph.com">code-review-graph.com</a><br><br>
 <code>pip install code-review-graph && code-review-graph install</code><br>
-<sub>Works with Claude Code, Cursor, Windsurf, Zed, Continue, OpenCode, and Antigravity</sub>
+<sub>Works with Claude Code, Cursor, Gemini CLI, Windsurf, Zed, Continue, OpenCode, and Antigravity</sub>
 </p>
