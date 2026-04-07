@@ -1,7 +1,8 @@
 """Tests for quality-related MCP tools."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from code_review_graph.graph import GraphStore
 from code_review_graph.parser import CodeParser
@@ -62,8 +63,14 @@ class TestCodeQualityTools:
         complex_node = next((n for n in nodes if n.name == "complex_func"), None)
 
         assert complex_node is not None
-        assert complex_node.extra.get("param_count") == 7 or hasattr(complex_node, "param_count")
-        assert complex_node.extra.get("complexity_score") == 5 or hasattr(complex_node, "complexity_score")
+        has_param = complex_node.extra.get("param_count") == 7 or hasattr(
+            complex_node, "param_count"
+        )
+        assert has_param
+        has_cc = complex_node.extra.get("complexity_score") == 5 or hasattr(
+            complex_node, "complexity_score"
+        )
+        assert has_cc
 
     def test_graph_persists_smell_tags(self, graph_with_metrics, tmp_path):
         """Graph can persist and retrieve smell tags."""

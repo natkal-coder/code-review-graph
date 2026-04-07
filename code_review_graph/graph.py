@@ -177,15 +177,23 @@ class GraphStore:
         # Extract readability/complexity fields from extra
         docstring_summary: Optional[str] = extra_dict.get("docstring_summary")
         intent_tags_raw = extra_dict.get("intent_tags")
-        intent_tags: Optional[str] = json.dumps(intent_tags_raw) if intent_tags_raw is not None else None
+        intent_tags: Optional[str] = (
+            json.dumps(intent_tags_raw) if intent_tags_raw is not None else None
+        )
         has_docstring: int = int(bool(extra_dict.get("has_docstring", False)))
-        documentation_gap: int = int(bool(extra_dict.get("documentation_gap", False)))
+        documentation_gap: int = int(
+            bool(extra_dict.get("documentation_gap", False))
+        )
         complexity_score: Optional[float] = extra_dict.get("complexity_score")
-        cognitive_complexity: Optional[float] = extra_dict.get("cognitive_complexity")
+        cognitive_complexity: Optional[float] = extra_dict.get(
+            "cognitive_complexity"
+        )
         param_count: Optional[int] = extra_dict.get("param_count")
         nesting_depth: Optional[int] = extra_dict.get("nesting_depth")
         smell_tags_raw = extra_dict.get("smell_tags")
-        smell_tags: Optional[str] = json.dumps(smell_tags_raw) if smell_tags_raw is not None else None
+        smell_tags: Optional[str] = (
+            json.dumps(smell_tags_raw) if smell_tags_raw is not None else None
+        )
 
         self._conn.execute(
             """INSERT INTO nodes

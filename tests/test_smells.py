@@ -1,14 +1,11 @@
 """Tests for code smell detection."""
 
-import pytest
-
+from code_review_graph.parser import NodeInfo
 from code_review_graph.smells import (
     analyze_node,
-    detect_god_object,
-    detect_long_param_list,
     detect_deep_nesting,
+    detect_long_param_list,
 )
-from code_review_graph.parser import NodeInfo
 
 
 class TestSmellDetection:
