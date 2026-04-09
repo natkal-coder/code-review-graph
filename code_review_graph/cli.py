@@ -15,6 +15,9 @@ Usage:
     code-review-graph unregister <path_or_alias>
     code-review-graph repos
     code-review-graph health [--json]
+    code-review-graph context-status [--repo REPO]
+    code-review-graph context-clear [--repo REPO]
+    code-review-graph context-show [--repo REPO] [--top N]
 """
 
 from __future__ import annotations
@@ -75,21 +78,24 @@ def _print_banner() -> None:
 {c}  ●──●──●{r}       {d}smarter code reviews{r}
 
   {b}Commands:{r}
-    {g}install{r}     Set up MCP server for AI coding platforms
-    {g}init{r}        Alias for install
-    {g}build{r}       Full graph build {d}(parse all files){r}
-    {g}update{r}      Incremental update {d}(changed files only){r}
-    {g}watch{r}       Auto-update on file changes
-    {g}status{r}      Show graph statistics
-    {g}visualize{r}   Generate interactive HTML graph
-    {g}wiki{r}        Generate markdown wiki from communities
-    {g}detect-changes{r} Analyze change impact {d}(risk-scored review){r}
-    {g}register{r}    Register a repository in the multi-repo registry
-    {g}unregister{r}  Remove a repository from the registry
-    {g}repos{r}       List registered repositories
-    {g}eval{r}        Run evaluation benchmarks
-    {g}health{r}      Code quality health report
-    {g}serve{r}       Start MCP server
+    {g}install{r}        Set up MCP server for AI coding platforms
+    {g}init{r}           Alias for install
+    {g}build{r}          Full graph build {d}(parse all files){r}
+    {g}update{r}         Incremental update {d}(changed files only){r}
+    {g}watch{r}          Auto-update on file changes
+    {g}status{r}         Show graph statistics
+    {g}visualize{r}      Generate interactive HTML graph
+    {g}wiki{r}           Generate markdown wiki from communities
+    {g}detect-changes{r}  Analyze change impact {d}(risk-scored review){r}
+    {g}register{r}       Register a repository in the multi-repo registry
+    {g}unregister{r}     Remove a repository from the registry
+    {g}repos{r}          List registered repositories
+    {g}eval{r}           Run evaluation benchmarks
+    {g}health{r}         Code quality health report
+    {g}serve{r}          Start MCP server
+    {g}context-status{r}  Show context-graph statistics {d}(v3.0.0+){r}
+    {g}context-clear{r}   Clear context-graph cache {d}(v3.0.0+){r}
+    {g}context-show{r}    List active context nodes {d}(v3.0.0+){r}
 
   {d}Run{r} {b}code-review-graph <command> --help{r} {d}for details{r}
 """)
@@ -384,6 +390,61 @@ def _handle_health(args: argparse.Namespace) -> None:
     print()
 
 
+def _handle_context_commands(args: argparse.Namespace) -> None:
+    """Handle context-graph CLI commands (status, clear, show)."""
+    import json as json_module
+    from pathlib import Path as _Path
+
+    from .agent_detect import detect_agent
+    from .context_config import load_context_config
+    from .context_persistence import clear_context, load_context
+
+    repo_root_arg = getattr(args, "repo", None)
+    repo_root = _Path(repo_root_arg) if repo_root_arg else Path.cwd()
+
+    try:
+        config = load_context_config(repo_root)
+        agent = detect_agent()
+        db_path = _Path(config.persistence_path)
+
+        if args.command == "context-status":
+            context_graph = load_context(db_path, config, agent)
+            summary = context_graph.summary()
+            print(json_module.dumps(summary, indent=2))
+
+        elif args.command == "context-clear":
+            clear_context(db_path)
+            print(f"Context cleared: {db_path}")
+
+        elif args.command == "context-show":
+            context_graph = load_context(db_path, config, agent)
+            active = context_graph.active_context()
+            top_n = getattr(args, "top", 10)
+            active = active[:top_n]
+
+            if not active:
+                print("No active context nodes")
+                return
+
+            print(f"\nTop {len(active)} active context nodes:")
+            print(
+                f"{'Qualified Name':<50} {'Kind':<10} "
+                f"{'Access':<7} {'Freq':<5} {'Age(s)':<7} {'Tokens':<7}"
+            )
+            print("-" * 100)
+            for node in active:
+                age = node.time_since_access()
+                print(
+                    f"{node.qualified_name:<50} {node.kind:<10} "
+                    f"{node.access_count:<7} {node.frequency_score:<5.2f} "
+                    f"{age:<7.1f} {node.token_estimate:<7}"
+                )
+
+    except Exception as e:
+        logging.error("Context command failed: %s", e)
+        sys.exit(1)
+
+
 def _table_exists_h(conn: object, table: str) -> bool:
     """Check whether a table exists (used inside _handle_health)."""
     row = conn.execute(
@@ -548,6 +609,17 @@ def main() -> None:
         help="Output as machine-readable JSON",
     )
 
+    # Context-graph commands (v3.0.0+)
+    context_status_cmd = sub.add_parser("context-status", help="Show context-graph statistics")
+    context_status_cmd.add_argument("--repo", default=None, help="Repository root (auto-detected)")
+
+    context_clear_cmd = sub.add_parser("context-clear", help="Clear context-graph cache")
+    context_clear_cmd.add_argument("--repo", default=None, help="Repository root (auto-detected)")
+
+    context_show_cmd = sub.add_parser("context-show", help="List active context nodes")
+    context_show_cmd.add_argument("--repo", default=None, help="Repository root (auto-detected)")
+    context_show_cmd.add_argument("--top", type=int, default=10, help="Top N nodes to show (default: 10)")
+
     args = ap.parse_args()
 
     if args.version:
@@ -565,6 +637,10 @@ def main() -> None:
 
     if args.command == "health":
         _handle_health(args)
+        return
+
+    if args.command in ("context-status", "context-clear", "context-show"):
+        _handle_context_commands(args)
         return
 
     if args.command == "eval":
